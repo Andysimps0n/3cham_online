@@ -1,0 +1,11 @@
+{
+  "name": "Remix: Neobrutalist Omegle",
+  "description": "An Omegle clone styled with neobrutalist aesthetics, featuring live matching with diverse AI-powered stranger personalities, real webcam visual options, and a persisted chat history log.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
