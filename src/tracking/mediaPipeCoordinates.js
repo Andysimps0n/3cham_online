@@ -15,7 +15,7 @@ export const Z_SCALE = 2;
 
 export function mediaPipeToR3F(landmark, xyScale = XY_SCALE, zScale = Z_SCALE) {
   return {
-    x: (landmark.x - 0.5) * xyScale,
+    x: -(landmark.x - 0.5) * xyScale,
     y: -(landmark.y - 0.5) * xyScale,
     z: -landmark.z * zScale,
   };

@@ -65,49 +65,6 @@ export default function MediaPipeHolisticCanvas({
               zIndex: 40,
             }}
           >
-            <button
-              type="button"
-              className="neo-btn neo-btn-xs"
-              style={{
-                fontSize: '9px',
-                padding: '2px 6px',
-                backgroundColor: showLandmarks ? 'var(--color-yellow)' : '#f3f4f6',
-                color: '#000',
-                boxShadow: '1px 1px 0px #000',
-                border: '1.5px solid #000',
-              }}
-              onClick={() => setShowLandmarks((v) => !v)}
-            >
-              {showLandmarks ? 'LANDMARKS ON' : 'LANDMARKS OFF'}
-            </button>
-          </div>
-
-          <div
-            style={{
-              position: 'absolute',
-              top: '8px',
-              right: '8px',
-              backgroundColor: isTracking ? 'var(--color-green)' : 'var(--color-cyan)',
-              border: '1.5px solid #000',
-              boxShadow: '2px 2px 0px #000',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '9px',
-              fontWeight: '700',
-              padding: '2px 8px',
-              color: '#000',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              zIndex: 40,
-            }}
-          >
-            <div
-              className="status-dot-blink"
-              style={{ width: '6px', height: '6px', backgroundColor: '#000', borderRadius: '50%' }}
-            />
-            <span>
-              {fps} FPS · {isTracking ? 'TRACKING' : 'NO FACE'}
-            </span>
           </div>
         </>
       )}
