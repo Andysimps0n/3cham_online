@@ -7,6 +7,8 @@ import { Holistic } from '@mediapipe/holistic';
  */
 export function useHolisticFaceLandmarks(videoRef, isActive) {
   const landmarksRef = useRef(null);
+  const leftHandLandmarksRef = useRef(null);
+  const rightHandLandmarksRef = useRef(null);
   const holisticRef = useRef(null);
   const [fps, setFps] = useState(0);
   const [isTracking, setIsTracking] = useState(false);
@@ -14,6 +16,8 @@ export function useHolisticFaceLandmarks(videoRef, isActive) {
   useEffect(() => {
     if (!isActive || !videoRef?.current) {
       landmarksRef.current = null;
+      leftHandLandmarksRef.current = null;
+      rightHandLandmarksRef.current = null;
       setFps(0);
       setIsTracking(false);
       return;
@@ -42,6 +46,8 @@ export function useHolisticFaceLandmarks(videoRef, isActive) {
       if (cancelled) return;
 
       landmarksRef.current = results.faceLandmarks ?? null;
+      leftHandLandmarksRef.current = results.leftHandLandmarks ?? null;
+      rightHandLandmarksRef.current = results.rightHandLandmarks ?? null;
 
       frameCount++;
       const now = performance.now();
@@ -51,7 +57,11 @@ export function useHolisticFaceLandmarks(videoRef, isActive) {
         lastFpsTime = now;
       }
 
-      setIsTracking(Boolean(results.faceLandmarks?.length));
+      setIsTracking(Boolean(
+        results.faceLandmarks?.length
+        || results.leftHandLandmarks?.length
+        || results.rightHandLandmarks?.length
+      ));
     });
 
     const processFrame = async () => {
@@ -60,6 +70,8 @@ export function useHolisticFaceLandmarks(videoRef, isActive) {
       const video = videoRef.current;
       if (!video || video.readyState < 2) {
         landmarksRef.current = null;
+        leftHandLandmarksRef.current = null;
+        rightHandLandmarksRef.current = null;
         setIsTracking(false);
         rafId = requestAnimationFrame(processFrame);
         return;
@@ -82,10 +94,12 @@ export function useHolisticFaceLandmarks(videoRef, isActive) {
       holistic.close();
       holisticRef.current = null;
       landmarksRef.current = null;
+      leftHandLandmarksRef.current = null;
+      rightHandLandmarksRef.current = null;
       setFps(0);
       setIsTracking(false);
     };
   }, [isActive, videoRef]);
 
-  return { landmarksRef, fps, isTracking };
+  return { landmarksRef, leftHandLandmarksRef, rightHandLandmarksRef, fps, isTracking };
 }

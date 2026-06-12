@@ -408,6 +408,115 @@ body {
   text-transform: uppercase;
 }
 
+.face-direction-gradient {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 56px;
+  pointer-events: none;
+  z-index: 25;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.face-direction-gradient--left {
+  left: 0;
+  background: linear-gradient(to right, rgba(255, 51, 102, 0.9), rgba(255, 51, 102, 0.35), transparent);
+}
+
+.face-direction-gradient--right {
+  right: 0;
+  background: linear-gradient(to left, rgba(255, 51, 102, 0.9), rgba(255, 51, 102, 0.35), transparent);
+}
+
+.face-direction-gradient--left.face-direction-gradient--game-cue {
+  background: linear-gradient(to right, rgba(51, 102, 255, 0.95), rgba(51, 102, 255, 0.4), transparent);
+}
+
+.face-direction-gradient--right.face-direction-gradient--game-cue {
+  background: linear-gradient(to left, rgba(51, 102, 255, 0.95), rgba(51, 102, 255, 0.4), transparent);
+}
+
+.face-direction-gradient--center {
+  inset: 0;
+  width: auto;
+  background:
+    linear-gradient(to bottom, rgba(60, 224, 132, 0.85), rgba(60, 224, 132, 0.3), transparent 56px),
+    linear-gradient(to top, rgba(60, 224, 132, 0.85), rgba(60, 224, 132, 0.3), transparent 56px),
+    linear-gradient(to right, rgba(60, 224, 132, 0.85), rgba(60, 224, 132, 0.3), transparent 56px),
+    linear-gradient(to left, rgba(60, 224, 132, 0.85), rgba(60, 224, 132, 0.3), transparent 56px);
+}
+
+.face-direction-gradient--center.face-direction-gradient--game-cue-center {
+  background:
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.4), transparent 56px),
+    linear-gradient(to top, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.4), transparent 56px),
+    linear-gradient(to right, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.4), transparent 56px),
+    linear-gradient(to left, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.4), transparent 56px);
+}
+
+.face-direction-status-badge {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.75rem;
+  border: var(--neo-border-thin);
+  box-shadow: var(--neo-shadow-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.face-direction-status-badge--ready {
+  background-color: var(--color-green);
+  color: var(--color-dark);
+}
+
+.face-direction-status-badge--side {
+  background-color: #ff3366;
+  color: var(--color-white);
+}
+
+.game-countdown-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 45;
+  pointer-events: none;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 5rem;
+  color: var(--color-yellow);
+  text-shadow: 4px 4px 0 var(--color-dark);
+  text-transform: uppercase;
+}
+
+.game-score-display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1rem;
+  text-transform: uppercase;
+  padding: 0.6rem 1rem;
+  border: var(--neo-border-thin);
+  box-shadow: var(--neo-shadow-sm);
+  background-color: var(--color-yellow);
+  color: var(--color-dark);
+}
+
+.game-score-display--over {
+  background-color: var(--color-pink);
+  color: var(--color-white);
+}
+
 .video-label-tag-pink {
   background-color: var(--color-pink);
   color: var(--color-white);

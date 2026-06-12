@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Video, 
   RefreshCw, 
@@ -18,9 +18,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
-  Info
+  Info,
+  Play
 } from 'lucide-react';
 import MediaPipeHolisticCanvas from './components/MediaPipeHolisticCanvas';
+import MediaPipeHandCanvas from './components/MediaPipeHandCanvas';
+import { useHolisticFaceLandmarks } from './hooks/useHolisticFaceLandmarks';
+import { useChamChamGame } from './hooks/useChamChamGame';
 
 export default function App() {
   // Navigation & Screen Control
@@ -109,6 +113,7 @@ export default function App() {
   const messagesEndRef = useRef(null);
   const audioContextRef = useRef(null);
   const streamRef = useRef(null);
+  const { landmarksRef } = useHolisticFaceLandmarks(localVideoRef, cameraActive);
 
   // Preset interests for neobrutalist vibe
   const presetInterests = [
@@ -168,6 +173,28 @@ export default function App() {
       console.warn("Synth audio blocked or failed:", e);
     }
   };
+
+  const playGameTickBeep = useCallback(() => {
+    playSynthesizerBeep(540, 0.1, 'triangle');
+  }, [soundEnabled]);
+
+  const playGameSuccessBeep = useCallback(() => {
+    if (!soundEnabled) return;
+    playSynthesizerBeep(740, 0.07, 'square');
+    setTimeout(() => playSynthesizerBeep(988, 0.07, 'square'), 70);
+    setTimeout(() => playSynthesizerBeep(1318, 0.14, 'square'), 140);
+  }, [soundEnabled]);
+
+  const playGameFailBeep = useCallback(() => {
+    playSynthesizerBeep(160, 0.45, 'sawtooth');
+  }, [soundEnabled]);
+
+  const chamChamGame = useChamChamGame({
+    landmarksRef,
+    onTickBeep: playGameTickBeep,
+    onSuccessBeep: playGameSuccessBeep,
+    onFailBeep: playGameFailBeep,
+  });
 
   // Setup Web Camera
   const toggleCamera = async () => {
@@ -316,6 +343,7 @@ export default function App() {
   };
 
   const quitToLanding = () => {
+    chamChamGame.stopGame();
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
     }
@@ -687,6 +715,10 @@ export default function App() {
                       isActive={cameraActive}
                       label={nickname}
                       filterName={selectedFilter}
+                      landmarksRef={landmarksRef}
+                      gameActive={chamChamGame.gameActive}
+                      gameCue={chamChamGame.gameCue}
+                      countdown={chamChamGame.countdown}
                     />
 
                     {cameraActive && (
@@ -699,15 +731,58 @@ export default function App() {
                       />
                     )}
                   </div>
-
-                  {/* Visual frame 2: STRANGER */}
+                  
                   <div className="video-frame">
-           
+                    {/* <div className="video-label-tag video-label-tag-pink">
+                      Hand ({nickname})
+                    </div>
+
+                    <MediaPipeHandCanvas
+                      videoRef={localVideoRef}
+                      isActive={cameraActive}
+                      label={nickname}
+                    />
+
+                    {cameraActive && (
+                      <video
+                        ref={localVideoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        style={{ display: 'none' }}
+                      />
+                    )} */}
                   </div>
+
                 </div>
 
                 {/* Dynamic Action row under visual feed */}
-                <div style={{ display: "flex", gap: "1rem" }}>
+                <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+                  {chamChamGame.showScore && (
+                    <div className={`game-score-display ${chamChamGame.gamePhase === 'gameOver' ? 'game-score-display--over' : ''}`}>
+                      Score: {chamChamGame.score}
+                      {chamChamGame.gamePhase === 'gameOver' ? ' · Game Over' : ''}
+                    </div>
+                  )}
+
+                  <button
+                    className={`neo-btn neo-btn-sm ${chamChamGame.canStart && cameraActive && chamChamGame.gamePhase !== 'playing' ? 'neo-btn-green' : ''}`}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.25rem",
+                      padding: "0.6rem 1rem",
+                      opacity: chamChamGame.canStart && cameraActive && chamChamGame.gamePhase !== 'playing' ? 1 : 0.45,
+                      cursor: chamChamGame.canStart && cameraActive && chamChamGame.gamePhase !== 'playing' ? 'pointer' : 'not-allowed',
+                    }}
+                    onClick={chamChamGame.startGame}
+                    disabled={!cameraActive || chamChamGame.gamePhase === 'playing'}
+                    title={chamChamGame.canStart ? 'Start the game' : 'Tilt your head left or right to start'}
+                  >
+                    <Play size={14} />
+                    <span>Start</span>
+                  </button>
+
                   <button 
                     className="neo-btn neo-btn-sm" 
                     style={{ backgroundColor: "var(--color-orange)", display: "flex", alignItems: "center", gap: "0.25rem", padding: "0.6rem 1rem" }}
