@@ -484,6 +484,56 @@ body {
   color: var(--color-white);
 }
 
+.model-load-overlay {
+  min-width: 220px;
+  padding: 0.75rem 1rem;
+  background-color: var(--color-yellow);
+  color: var(--color-dark);
+  border: var(--neo-border-thin);
+  box-shadow: var(--neo-shadow-sm);
+  font-family: var(--font-display);
+  text-align: center;
+  pointer-events: none;
+}
+
+.model-load-overlay--error {
+  background-color: var(--color-pink);
+  color: var(--color-white);
+}
+
+.model-load-overlay__title {
+  font-weight: 800;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+
+.model-load-overlay__bar {
+  height: 10px;
+  border: 2px solid #000;
+  background-color: #fff;
+  margin-bottom: 0.35rem;
+}
+
+.model-load-overlay__fill {
+  height: 100%;
+  background-color: var(--color-green);
+  transition: width 0.15s ease;
+}
+
+.model-load-overlay__percent {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.model-load-overlay__hint {
+  margin-top: 0.35rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  opacity: 0.85;
+}
+
 .game-countdown-overlay {
   position: absolute;
   inset: 0;
@@ -498,6 +548,22 @@ body {
   color: var(--color-yellow);
   text-shadow: 4px 4px 0 var(--color-dark);
   text-transform: uppercase;
+}
+
+.face-tracking-hint {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 35;
+  pointer-events: none;
+  background-color: rgba(0, 0, 0, 0.75);
+  color: var(--color-yellow);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  padding: 0.35rem 0.6rem;
+  border: var(--neo-border-thin);
 }
 
 .game-score-display {

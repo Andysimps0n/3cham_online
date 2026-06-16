@@ -14,7 +14,7 @@ export function useHolisticFaceLandmarks(videoRef, isActive) {
   const [isTracking, setIsTracking] = useState(false);
 
   useEffect(() => {
-    if (!isActive || !videoRef?.current) {
+    if (!isActive) {
       landmarksRef.current = null;
       leftHandLandmarksRef.current = null;
       rightHandLandmarksRef.current = null;
@@ -22,6 +22,8 @@ export function useHolisticFaceLandmarks(videoRef, isActive) {
       setIsTracking(false);
       return;
     }
+
+    if (!videoRef) return;
 
     let cancelled = false;
     let rafId = 0;

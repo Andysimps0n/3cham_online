@@ -8,6 +8,7 @@ export default function MediaPipeHolisticCanvas({
   isActive,
   label = 'You',
   landmarksRef: externalLandmarksRef,
+  isTracking = false,
   gameActive = false,
   gameCue = null,
   countdown = null,
@@ -184,6 +185,12 @@ export default function MediaPipeHolisticCanvas({
 
           {countdown != null && (
             <div className="game-countdown-overlay">{countdown}</div>
+          )}
+
+          {!isTracking && !gameActive && (
+            <div className="face-tracking-hint">
+              Point your face at the camera
+            </div>
           )}
         </>
       )}

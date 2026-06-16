@@ -113,7 +113,7 @@ export default function App() {
   const messagesEndRef = useRef(null);
   const audioContextRef = useRef(null);
   const streamRef = useRef(null);
-  const { landmarksRef } = useHolisticFaceLandmarks(localVideoRef, cameraActive);
+  const { landmarksRef, isTracking } = useHolisticFaceLandmarks(localVideoRef, cameraActive);
 
   // Preset interests for neobrutalist vibe
   const presetInterests = [
@@ -710,17 +710,6 @@ export default function App() {
                       You ({nickname})
                     </div>
 
-                    <MediaPipeHolisticCanvas
-                      videoRef={localVideoRef}
-                      isActive={cameraActive}
-                      label={nickname}
-                      filterName={selectedFilter}
-                      landmarksRef={landmarksRef}
-                      gameActive={chamChamGame.gameActive}
-                      gameCue={chamChamGame.gameCue}
-                      countdown={chamChamGame.countdown}
-                    />
-
                     {cameraActive && (
                       <video
                         ref={localVideoRef}
@@ -730,6 +719,18 @@ export default function App() {
                         style={{ display: 'none' }}
                       />
                     )}
+
+                    <MediaPipeHolisticCanvas
+                      videoRef={localVideoRef}
+                      isActive={cameraActive}
+                      label={nickname}
+                      filterName={selectedFilter}
+                      landmarksRef={landmarksRef}
+                      isTracking={isTracking}
+                      gameActive={chamChamGame.gameActive}
+                      gameCue={chamChamGame.gameCue}
+                      countdown={chamChamGame.countdown}
+                    />
                   </div>
                   
                   <div className="video-frame">

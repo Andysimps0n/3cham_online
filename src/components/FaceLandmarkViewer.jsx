@@ -1,11 +1,11 @@
-import React, { Suspense, useMemo, useRef } from 'react';
+import React, { Component, Suspense, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
-import { Center } from '@react-three/drei';
+import { Center, Html, useProgress } from '@react-three/drei';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import * as THREE from 'three';
 import { mediaPipeToR3F } from '../tracking/mediaPipeCoordinates';
 
-const MODEL_PATH = '/models/model.obj';
+const MODEL_PATH = '/models/model2.obj';
 
 const LM = {
   FOREHEAD: 10,
@@ -65,13 +65,64 @@ function hasRequiredLandmarks(landmarks) {
     && landmarks[LM.CHIN];
 }
 
+function ModelLoadProgress() {
+  const { progress, active } = useProgress();
+
+  if (!active) return null;
+
+  return (
+    <Html center>
+      <div className="model-load-overlay">
+        <div className="model-load-overlay__title">Loading 3D model</div>
+        <div className="model-load-overlay__bar">
+          <div
+            className="model-load-overlay__fill"
+            style={{ width: `${Math.round(progress)}%` }}
+          />
+        </div>
+        <div className="model-load-overlay__percent">{Math.round(progress)}%</div>
+        <div className="model-load-overlay__hint">First load can take a moment (~14MB)</div>
+      </div>
+    </Html>
+  );
+}
+
+class ModelErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error) {
+    console.error('Failed to load 3D model:', error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Html center>
+          <div className="model-load-overlay model-load-overlay--error">
+            <div className="model-load-overlay__title">Model failed to load</div>
+            <div className="model-load-overlay__hint">Check your network and refresh the page.</div>
+          </div>
+        </Html>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 function ObjModel() {
   const obj = useLoader(OBJLoader, MODEL_PATH);
 
   const { prepared, boxHelper } = useMemo(() => {
     const clone = obj.clone();
 
-    // material setup
     clone.traverse((child) => {
       if (child.isMesh) {
         child.material = new THREE.MeshStandardMaterial({
@@ -83,24 +134,18 @@ function ObjModel() {
       clone.rotation.z = -Math.PI / 2;
     });
 
-    // bounding box
     const box = new THREE.Box3().setFromObject(clone);
     const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
 
     const maxDim = Math.max(size.x, size.y, size.z) || 1;
     const scale = 0.8 / maxDim;
     clone.scale.setScalar(scale);
 
-    // IMPORTANT: recompute after scaling
     const scaledBox = new THREE.Box3().setFromObject(clone);
-
     const boxSize = scaledBox.getSize(new THREE.Vector3());
     const boxCenter = scaledBox.getCenter(new THREE.Vector3());
 
-    // create visible box geometry
     const geometry = new THREE.BoxGeometry(boxSize.x, boxSize.y, boxSize.z);
-
     const wireframe = new THREE.WireframeGeometry(geometry);
     const line = new THREE.LineSegments(
       wireframe,
@@ -115,17 +160,14 @@ function ObjModel() {
     };
   }, [obj]);
 
-return (
-  <Center>
-    <group>
-      {/* your model */}
-      <primitive object={prepared} />
-
-      {/* invisible box (now visible) */}
-      <primitive object={boxHelper} />
-    </group>
-  </Center>
-);
+  return (
+    <Center>
+      <group>
+        <primitive object={prepared} />
+        <primitive object={boxHelper} />
+      </group>
+    </Center>
+  );
 }
 
 function FaceDirectionArrow({ landmarksRef, visible }) {
@@ -155,7 +197,6 @@ function FaceDirectionArrow({ landmarksRef, visible }) {
 
     computeFaceOrientation(landmarks);
 
-    // Base at eye midpoint; tip points along MediaPipe-derived forward
     arrow.position.copy(tempOrigin);
     arrow.setDirection(tempForward);
     arrow.setLength(ARROW_LENGTH, 0.1, 0.05);
@@ -171,14 +212,13 @@ function FaceOrientedModel({ landmarksRef, visible, children }) {
     const group = groupRef.current;
     if (!group) return;
 
-    const landmarks = landmarksRef.current;
-    const show = visible && hasRequiredLandmarks(landmarks);
+    group.visible = visible;
+    if (!visible) return;
 
-    group.visible = show;
-    if (!show) return;
+    const landmarks = landmarksRef.current;
+    if (!hasRequiredLandmarks(landmarks)) return;
 
     computeFaceOrientation(landmarks);
-    // tempRotationMatrix.makeBasis(tempRight, tempUp, tempForward);
     tempRotationMatrix.makeBasis(tempUp, tempRight, tempForward);
     group.quaternion.setFromRotationMatrix(tempRotationMatrix);
   });
@@ -194,13 +234,17 @@ function SceneContent({ landmarksRef, visible }) {
       <directionalLight position={[2, 3, 4]} intensity={1.1} />
       <directionalLight position={[-2, -1, -3]} intensity={0.35} />
 
+      <ModelLoadProgress />
+
       <FaceDirectionArrow landmarksRef={landmarksRef} visible={visible} />
 
-      <Suspense fallback={null}>
-        <FaceOrientedModel landmarksRef={landmarksRef} visible={visible}>
-          <ObjModel />
-        </FaceOrientedModel>
-      </Suspense>
+      <ModelErrorBoundary>
+        <Suspense fallback={null}>
+          <FaceOrientedModel landmarksRef={landmarksRef} visible={visible}>
+            <ObjModel />
+          </FaceOrientedModel>
+        </Suspense>
+      </ModelErrorBoundary>
 
       <gridHelper
         args={[4, 20, '#333333', '#1a1a1a']}
