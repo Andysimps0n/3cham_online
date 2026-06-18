@@ -145,13 +145,12 @@ class ModelErrorBoundary extends Component {
 }
 
 function ObjModel() {
-  const { prepared, boxHelper } = getPreparedModel();
+  const { prepared } = getPreparedModel();
 
   return (
     <Center>
       <group>
         <primitive object={prepared} />
-        {boxHelper && <primitive object={boxHelper} />}
       </group>
     </Center>
   );
