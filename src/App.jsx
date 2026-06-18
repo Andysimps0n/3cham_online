@@ -203,6 +203,10 @@ export default function App() {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+      streamRef.current = null;
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = null;
+      }
       setCameraActive(false);
       triggerToast("Webcam disabled");
     } else {
@@ -714,15 +718,13 @@ export default function App() {
                       You ({nickname})
                     </div>
 
-                    {cameraActive && (
-                      <video
-                        ref={localVideoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        style={{ display: 'none' }}
-                      />
-                    )}
+                    <video
+                      ref={localVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      style={{ display: 'none' }}
+                    />
 
                     <MediaPipeHolisticCanvas
                       videoRef={localVideoRef}

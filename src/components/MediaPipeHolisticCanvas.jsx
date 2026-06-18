@@ -134,7 +134,11 @@ export default function MediaPipeHolisticCanvas({
       }}
     >
       {isActive ? (
-        <FaceLandmarkViewer landmarksRef={landmarksRef} visible={showLandmarks} />
+        <FaceLandmarkViewer
+          landmarksRef={landmarksRef}
+          visible={showLandmarks}
+          isTracking={isTracking}
+        />
       ) : (
         <div
           style={{

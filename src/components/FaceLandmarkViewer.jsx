@@ -1,4 +1,4 @@
-import React, { Component, useRef, useState } from 'react';
+import React, { Component, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Center, Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -103,11 +103,11 @@ function ModelLoadOverlay({ progress, phase, error }) {
   );
 }
 
-function CalibrationOverlay() {
+function TrackingWarmupOverlay() {
   return (
     <Html center>
       <div className="model-load-overlay">
-        <div className="model-load-overlay__title">Calibrating face tracking...</div>
+        <div className="model-load-overlay__title">Warming up face tracking...</div>
         <div className="model-load-overlay__hint">Point your face at the camera</div>
       </div>
     </Html>
@@ -158,9 +158,8 @@ function ObjModel() {
 }
 
 // Rotates the model based on the face orientation
-function FaceOrientedModel({ landmarksRef, visible, onFaceLockChange, children }) {
+function FaceOrientedModel({ landmarksRef, visible, children }) {
   const groupRef = useRef();
-  const faceLockedRef = useRef(false);
 
   useFrame(() => {
     const group = groupRef.current;
@@ -171,14 +170,7 @@ function FaceOrientedModel({ landmarksRef, visible, onFaceLockChange, children }
     if (!visible) return;
 
     const landmarks = landmarksRef.current;
-    const locked = hasRequiredLandmarks(landmarks);
-
-    if (locked !== faceLockedRef.current) {
-      faceLockedRef.current = locked;
-      onFaceLockChange?.(locked);
-    }
-
-    if (!locked) return;
+    if (!hasRequiredLandmarks(landmarks)) return;
 
     computeFaceOrientation(landmarks);
     tempRotationMatrix.makeBasis(tempUp, tempRight, tempForward);
@@ -188,9 +180,17 @@ function FaceOrientedModel({ landmarksRef, visible, onFaceLockChange, children }
   return <group ref={groupRef}>{children}</group>;
 }
 
-function SceneContent({ landmarksRef, visible, modelStatus, modelProgress, modelPhase, modelError }) {
-  const [faceLocked, setFaceLocked] = useState(false);
+function SceneContent({
+  landmarksRef,
+  visible,
+  modelStatus,
+  modelProgress,
+  modelPhase,
+  modelError,
+  isTracking,
+}) {
   const modelReady = modelStatus === 'ready';
+  const showModel = modelReady && isTracking;
 
   return (
     <>
@@ -203,14 +203,10 @@ function SceneContent({ landmarksRef, visible, modelStatus, modelProgress, model
         <ModelLoadOverlay progress={modelProgress} phase={modelPhase} error={modelError} />
       )}
 
-      {modelReady && !faceLocked && <CalibrationOverlay />}
+      {modelReady && !isTracking && <TrackingWarmupOverlay />}
 
-      <FaceOrientedModel
-        landmarksRef={landmarksRef}
-        visible={visible}
-        onFaceLockChange={setFaceLocked}
-      >
-        {modelReady && faceLocked && (
+      <FaceOrientedModel landmarksRef={landmarksRef} visible={visible}>
+        {showModel && (
           <ModelErrorBoundary>
             <ObjModel />
           </ModelErrorBoundary>
@@ -220,7 +216,7 @@ function SceneContent({ landmarksRef, visible, modelStatus, modelProgress, model
   );
 }
 
-export default function FaceLandmarkViewer({ landmarksRef, visible = true }) {
+export default function FaceLandmarkViewer({ landmarksRef, visible = true, isTracking = false }) {
   const { progress, phase, status, error } = useModelPreload();
 
   return (
@@ -236,6 +232,7 @@ export default function FaceLandmarkViewer({ landmarksRef, visible = true }) {
         modelProgress={progress}
         modelPhase={phase}
         modelError={error}
+        isTracking={isTracking}
       />
     </Canvas>
   );
