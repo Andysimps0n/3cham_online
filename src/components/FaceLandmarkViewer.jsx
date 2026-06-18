@@ -1,12 +1,10 @@
-import React, { Component, Suspense, useMemo, useRef } from 'react';
+import React, { Component, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Center, Html, useGLTF, useProgress } from '@react-three/drei';
+import { Center, Html } from '@react-three/drei';
 import * as THREE from 'three';
+import { getPreparedModel } from '../assets/preloadModel';
+import { useModelPreload } from '../hooks/useModelPreload';
 import { mediaPipeToR3F } from '../tracking/mediaPipeCoordinates';
-
-const MODEL_PATH = '/models/model2.glb';
-
-useGLTF.preload(MODEL_PATH);
 
 const LM = {
   FOREHEAD: 10,
@@ -66,23 +64,51 @@ function hasRequiredLandmarks(landmarks) {
     && landmarks[LM.CHIN];
 }
 
-function ModelLoadProgress() {
-  const { progress, active } = useProgress();
+const PHASE_LABELS = {
+  downloading: 'Downloading 3D assets...',
+  preparing: 'Preparing model for rendering...',
+  ready: 'Ready',
+};
 
-  if (!active) return null;
+function ModelLoadOverlay({ progress, phase, error }) {
+  if (error) {
+    return (
+      <Html center>
+        <div className="model-load-overlay model-load-overlay--error">
+          <div className="model-load-overlay__title">Model failed to load</div>
+          <div className="model-load-overlay__hint">Check your network and refresh the page.</div>
+        </div>
+      </Html>
+    );
+  }
+
+  const isPreparing = phase === 'preparing';
+  const phaseLabel = PHASE_LABELS[phase] ?? PHASE_LABELS.downloading;
 
   return (
     <Html center>
       <div className="model-load-overlay">
-        <div className="model-load-overlay__title">Loading 3D model</div>
+        <div className="model-load-overlay__title">{phaseLabel}</div>
         <div className="model-load-overlay__bar">
           <div
-            className="model-load-overlay__fill"
-            style={{ width: `${Math.round(progress)}%` }}
+            className={`model-load-overlay__fill${isPreparing ? ' model-load-overlay__fill--indeterminate' : ''}`}
+            style={isPreparing ? undefined : { width: `${Math.round(progress)}%` }}
           />
         </div>
-        <div className="model-load-overlay__percent">{Math.round(progress)}%</div>
-        <div className="model-load-overlay__hint">First load can take a moment</div>
+        <div className="model-load-overlay__percent">
+          {isPreparing ? 'Almost there...' : `${Math.round(progress)}%`}
+        </div>
+      </div>
+    </Html>
+  );
+}
+
+function CalibrationOverlay() {
+  return (
+    <Html center>
+      <div className="model-load-overlay">
+        <div className="model-load-overlay__title">Calibrating face tracking...</div>
+        <div className="model-load-overlay__hint">Point your face at the camera</div>
       </div>
     </Html>
   );
@@ -119,52 +145,7 @@ class ModelErrorBoundary extends Component {
 }
 
 function ObjModel() {
-  const { scene } = useGLTF(MODEL_PATH);
-
-  const { prepared, boxHelper } = useMemo(() => {
-    const clone = scene.clone();
-
-    clone.traverse((child) => {
-      if (child.isMesh) {
-        child.material = new THREE.MeshStandardMaterial({
-          color: '#d4d4d4',
-          roughness: 0.45,
-          metalness: 0.15,
-        });
-      }
-    });
-    clone.rotation.z = -Math.PI / 2;
-
-    const box = new THREE.Box3().setFromObject(clone);
-    const size = box.getSize(new THREE.Vector3());
-
-    const maxDim = Math.max(size.x, size.y, size.z);
-    if (!Number.isFinite(maxDim) || maxDim <= 0) {
-      console.warn('Model bounding box is invalid; skipping wireframe helper');
-      return { prepared: clone, boxHelper: null };
-    }
-
-    const scale = 0.8 / maxDim;
-    clone.scale.setScalar(scale);
-
-    const scaledBox = new THREE.Box3().setFromObject(clone);
-    const boxSize = scaledBox.getSize(new THREE.Vector3());
-    const boxCenter = scaledBox.getCenter(new THREE.Vector3());
-
-    const geometry = new THREE.BoxGeometry(boxSize.x, boxSize.y, boxSize.z);
-    const wireframe = new THREE.WireframeGeometry(geometry);
-    const line = new THREE.LineSegments(
-      wireframe,
-      new THREE.LineBasicMaterial({ color: 'red' })
-    );
-
-    line.position.copy(boxCenter);
-
-    return {
-      prepared: clone,
-      boxHelper: line,
-    };
-  }, [scene]);
+  const { prepared, boxHelper } = getPreparedModel();
 
   return (
     <Center>
@@ -176,15 +157,13 @@ function ObjModel() {
   );
 }
 
-
-
 // Rotates the model based on the face orientation
-// This does not puts the model on the scene
-function FaceOrientedModel({ landmarksRef, visible, children }) {
+function FaceOrientedModel({ landmarksRef, visible, onFaceLockChange, children }) {
   const groupRef = useRef();
+  const faceLockedRef = useRef(false);
 
   useFrame(() => {
-    const group = groupRef.current
+    const group = groupRef.current;
 
     if (!group) return;
     group.visible = visible;
@@ -192,7 +171,14 @@ function FaceOrientedModel({ landmarksRef, visible, children }) {
     if (!visible) return;
 
     const landmarks = landmarksRef.current;
-    if (!hasRequiredLandmarks(landmarks)) return;
+    const locked = hasRequiredLandmarks(landmarks);
+
+    if (locked !== faceLockedRef.current) {
+      faceLockedRef.current = locked;
+      onFaceLockChange?.(locked);
+    }
+
+    if (!locked) return;
 
     computeFaceOrientation(landmarks);
     tempRotationMatrix.makeBasis(tempUp, tempRight, tempForward);
@@ -202,7 +188,10 @@ function FaceOrientedModel({ landmarksRef, visible, children }) {
   return <group ref={groupRef}>{children}</group>;
 }
 
-function SceneContent({ landmarksRef, visible }) {
+function SceneContent({ landmarksRef, visible, modelStatus, modelProgress, modelPhase, modelError }) {
+  const [faceLocked, setFaceLocked] = useState(false);
+  const modelReady = modelStatus === 'ready';
+
   return (
     <>
       <color attach="background" args={['#0d0d0d']} />
@@ -210,28 +199,44 @@ function SceneContent({ landmarksRef, visible }) {
       <directionalLight position={[2, 3, 4]} intensity={1.1} />
       <directionalLight position={[-2, -1, -3]} intensity={0.35} />
 
-      <ModelLoadProgress />
+      {!modelReady && (
+        <ModelLoadOverlay progress={modelProgress} phase={modelPhase} error={modelError} />
+      )}
 
+      {modelReady && !faceLocked && <CalibrationOverlay />}
 
-      <ModelErrorBoundary>
-        <Suspense fallback={null}>
-          <FaceOrientedModel landmarksRef={landmarksRef} visible={visible}>
+      <FaceOrientedModel
+        landmarksRef={landmarksRef}
+        visible={visible}
+        onFaceLockChange={setFaceLocked}
+      >
+        {modelReady && faceLocked && (
+          <ModelErrorBoundary>
             <ObjModel />
-          </FaceOrientedModel>
-        </Suspense>
-      </ModelErrorBoundary>
+          </ModelErrorBoundary>
+        )}
+      </FaceOrientedModel>
     </>
   );
 }
 
 export default function FaceLandmarkViewer({ landmarksRef, visible = true }) {
+  const { progress, phase, status, error } = useModelPreload();
+
   return (
     <Canvas
       camera={{ position: [0, 0, 1.5], fov: 50, near: 0.01, far: 100 }}
       style={{ width: '100%', height: '100%', display: 'block' }}
       gl={{ antialias: true }}
     >
-      <SceneContent landmarksRef={landmarksRef} visible={visible} />
+      <SceneContent
+        landmarksRef={landmarksRef}
+        visible={visible}
+        modelStatus={status}
+        modelProgress={progress}
+        modelPhase={phase}
+        modelError={error}
+      />
     </Canvas>
   );
 }

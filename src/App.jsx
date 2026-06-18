@@ -21,6 +21,7 @@ import {
   Info,
   Play
 } from 'lucide-react';
+import { startModelDownload } from './assets/preloadModel';
 import MediaPipeHolisticCanvas from './components/MediaPipeHolisticCanvas';
 import MediaPipeHandCanvas from './components/MediaPipeHandCanvas';
 import { useHolisticFaceLandmarks } from './hooks/useHolisticFaceLandmarks';
@@ -205,6 +206,9 @@ export default function App() {
       setCameraActive(false);
       triggerToast("Webcam disabled");
     } else {
+      // Kick off the GLB download now so it runs in parallel with camera permission + stream setup.
+      startModelDownload();
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         streamRef.current = stream;
