@@ -1,11 +1,12 @@
 import React, { Component, Suspense, useMemo, useRef } from 'react';
-import { Canvas, useFrame, useLoader } from '@react-three/fiber';
-import { Center, Html, useProgress } from '@react-three/drei';
-import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { Center, Html, useGLTF, useProgress } from '@react-three/drei';
 import * as THREE from 'three';
 import { mediaPipeToR3F } from '../tracking/mediaPipeCoordinates';
 
-const MODEL_PATH = '/models/model2.obj';
+const MODEL_PATH = '/models/model2.glb';
+
+useGLTF.preload(MODEL_PATH);
 
 const LM = {
   FOREHEAD: 10,
@@ -81,7 +82,7 @@ function ModelLoadProgress() {
           />
         </div>
         <div className="model-load-overlay__percent">{Math.round(progress)}%</div>
-        <div className="model-load-overlay__hint">First load can take a moment (~14MB)</div>
+        <div className="model-load-overlay__hint">First load can take a moment</div>
       </div>
     </Html>
   );
@@ -118,10 +119,10 @@ class ModelErrorBoundary extends Component {
 }
 
 function ObjModel() {
-  const obj = useLoader(OBJLoader, MODEL_PATH);
+  const { scene } = useGLTF(MODEL_PATH);
 
   const { prepared, boxHelper } = useMemo(() => {
-    const clone = obj.clone();
+    const clone = scene.clone();
 
     clone.traverse((child) => {
       if (child.isMesh) {
@@ -131,13 +132,18 @@ function ObjModel() {
           metalness: 0.15,
         });
       }
-      clone.rotation.z = -Math.PI / 2;
     });
+    clone.rotation.z = -Math.PI / 2;
 
     const box = new THREE.Box3().setFromObject(clone);
     const size = box.getSize(new THREE.Vector3());
 
-    const maxDim = Math.max(size.x, size.y, size.z) || 1;
+    const maxDim = Math.max(size.x, size.y, size.z);
+    if (!Number.isFinite(maxDim) || maxDim <= 0) {
+      console.warn('Model bounding box is invalid; skipping wireframe helper');
+      return { prepared: clone, boxHelper: null };
+    }
+
     const scale = 0.8 / maxDim;
     clone.scale.setScalar(scale);
 
@@ -158,61 +164,31 @@ function ObjModel() {
       prepared: clone,
       boxHelper: line,
     };
-  }, [obj]);
+  }, [scene]);
 
   return (
     <Center>
       <group>
         <primitive object={prepared} />
-        <primitive object={boxHelper} />
+        {boxHelper && <primitive object={boxHelper} />}
       </group>
     </Center>
   );
 }
 
-function FaceDirectionArrow({ landmarksRef, visible }) {
-  const arrowRef = useRef();
 
-  const arrowObject = useMemo(
-    () => new THREE.ArrowHelper(
-      new THREE.Vector3(0, 0, 1),
-      new THREE.Vector3(0, 0, 0),
-      ARROW_LENGTH,
-      ARROW_COLOR,
-      0.1,
-      0.05
-    ),
-    []
-  );
 
-  useFrame(() => {
-    const arrow = arrowRef.current;
-    if (!arrow) return;
-
-    const landmarks = landmarksRef.current;
-    const show = visible && hasRequiredLandmarks(landmarks);
-
-    arrow.visible = show;
-    if (!show) return;
-
-    computeFaceOrientation(landmarks);
-
-    arrow.position.copy(tempOrigin);
-    arrow.setDirection(tempForward);
-    arrow.setLength(ARROW_LENGTH, 0.1, 0.05);
-  });
-
-  return <primitive ref={arrowRef} object={arrowObject} />;
-}
-
+// Rotates the model based on the face orientation
+// This does not puts the model on the scene
 function FaceOrientedModel({ landmarksRef, visible, children }) {
   const groupRef = useRef();
 
   useFrame(() => {
-    const group = groupRef.current;
-    if (!group) return;
+    const group = groupRef.current
 
+    if (!group) return;
     group.visible = visible;
+
     if (!visible) return;
 
     const landmarks = landmarksRef.current;
@@ -236,7 +212,6 @@ function SceneContent({ landmarksRef, visible }) {
 
       <ModelLoadProgress />
 
-      <FaceDirectionArrow landmarksRef={landmarksRef} visible={visible} />
 
       <ModelErrorBoundary>
         <Suspense fallback={null}>
@@ -245,12 +220,6 @@ function SceneContent({ landmarksRef, visible }) {
           </FaceOrientedModel>
         </Suspense>
       </ModelErrorBoundary>
-
-      <gridHelper
-        args={[4, 20, '#333333', '#1a1a1a']}
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -0.55, 0]}
-      />
     </>
   );
 }
