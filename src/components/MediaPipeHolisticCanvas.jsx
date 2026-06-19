@@ -12,6 +12,7 @@ export default function MediaPipeHolisticCanvas({
   gameActive = false,
   gameCue = null,
   countdown = null,
+  remoteView = false,
 }) {
   const internalTracking = useHolisticFaceLandmarks(videoRef, isActive && !externalLandmarksRef);
   const landmarksRef = externalLandmarksRef ?? internalTracking.landmarksRef;
@@ -193,7 +194,7 @@ export default function MediaPipeHolisticCanvas({
 
           {!isTracking && !gameActive && (
             <div className="face-tracking-hint">
-              Point your face at the camera
+              {remoteView ? "Waiting for opponent camera..." : "Point your face at the camera"}
             </div>
           )}
         </>

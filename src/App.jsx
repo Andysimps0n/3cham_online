@@ -19,23 +19,91 @@ import {
   ChevronRight,
   Sparkles,
   Info,
-  Play
+  Play,
+  Copy,
+  UserPlus
 } from 'lucide-react';
 import { startModelDownload } from './assets/preloadModel';
 import MediaPipeHolisticCanvas from './components/MediaPipeHolisticCanvas';
 import MediaPipeHandCanvas from './components/MediaPipeHandCanvas';
 import { useHolisticFaceLandmarks } from './hooks/useHolisticFaceLandmarks';
 import { useChamChamGame } from './hooks/useChamChamGame';
+import { useMatchmaking } from './hooks/useMatchmaking';
+import {
+  deserializeFaceLandmarks,
+  PEER_LANDMARK_SEND_INTERVAL_MS,
+  PEER_LANDMARK_STALE_MS,
+  serializeFaceLandmarks,
+} from './tracking/landmarkSync';
+
+const HISTORY_STORAGE_KEY = 'neo_omegle_history_v2';
+
+const MOCK_SESSIONS = [
+  {
+    key: 'session_mock_1',
+    strangerAlias: 'PixelPirate',
+    strangerAvatarColor: '#66FF66',
+    interests: ['css-art', 'retro-gaming', 'web-art'],
+    startTime: '06/09/2026, 10:15 AM',
+    messages: [
+      { id: 'sys-1', role: 'system', text: 'Connected with a random stranger! They are interested in css-art, retro-gaming, web-art.', timestamp: '10:15 AM' },
+      { id: 'str-1', role: 'stranger', text: 'ahoy matey! you build css-art with zero external dependencies too?', timestamp: '10:15 AM' },
+      { id: 'usr-1', role: 'user', text: 'Absolutely, thick borders and solid box shadows are my jam!', timestamp: '10:16 AM' },
+      { id: 'str-2', role: 'stranger', text: 'brutal! i love the raw layouts. high contrast rules the web!', timestamp: '10:16 AM' },
+      { id: 'sys-2', role: 'system', text: 'You have disconnected from the chat session.', timestamp: '10:18 AM' },
+    ],
+  },
+  {
+    key: 'session_mock_2',
+    strangerAlias: 'CosmicGazer',
+    strangerAvatarColor: '#B266FF',
+    interests: ['science-fiction', 'stars', 'analog-synths'],
+    startTime: '06/09/2026, 09:42 AM',
+    messages: [
+      { id: 'sys-3', role: 'system', text: 'Connected with a random stranger! They are interested in science-fiction, stars, analog-synths.', timestamp: '09:42 AM' },
+      { id: 'str-3', role: 'stranger', text: 'have you ever listened to old analog sci-fi synthesizer soundtracks under a starry sky?', timestamp: '09:42 AM' },
+      { id: 'usr-3', role: 'user', text: 'Yes! Vangelis style is legendary.', timestamp: '09:43 AM' },
+      { id: 'str-4', role: 'stranger', text: 'exactly, tape echo and detuned oscillators create magic! 🪐', timestamp: '09:44 AM' },
+      { id: 'sys-4', role: 'system', text: 'You have disconnected from the chat session.', timestamp: '09:45 AM' },
+    ],
+  },
+  {
+    key: 'session_mock_3',
+    strangerAlias: 'MemeAlchemist',
+    strangerAvatarColor: '#FF66AA',
+    interests: ['vaporwave', 'lofi-hiphop', 'retro-gaming'],
+    startTime: '06/08/2026, 11:30 PM',
+    messages: [
+      { id: 'sys-5', role: 'system', text: 'Connected with a random stranger! They are interested in vaporwave, lofi-hiphop, retro-gaming.', timestamp: '11:30 PM' },
+      { id: 'str-5', role: 'stranger', text: 'A E S T H E T I C S. what retro console are you gaming on tonight?', timestamp: '11:31 PM' },
+      { id: 'usr-5', role: 'user', text: 'Standard NES emulation on my custom desktop grid!', timestamp: '11:32 PM' },
+      { id: 'str-6', role: 'stranger', text: 'perfect choice. that brutal color palette is timeless.', timestamp: '11:33 PM' },
+      { id: 'sys-6', role: 'system', text: 'You have disconnected from the chat session.', timestamp: '11:35 PM' },
+    ],
+  },
+];
+
+function loadHistorySessions() {
+  try {
+    const saved = localStorage.getItem(HISTORY_STORAGE_KEY);
+    const parsed = saved ? JSON.parse(saved) : [];
+    return parsed.length === 0 ? MOCK_SESSIONS : parsed;
+  } catch {
+    return MOCK_SESSIONS;
+  }
+}
 
 export default function App() {
   // Navigation & Screen Control
   const [isPlaying, setIsPlaying] = useState(false); // false = landing page, true = matching/chat workspace
   const [isMatching, setIsMatching] = useState(false); // loading screen spinner
   const [matchingStatus, setMatchingStatus] = useState("Looking for someone cool...");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Identity / Setup State
   const [nickname, setNickname] = useState(() => localStorage.getItem("neo_user_name") || "Anonymoid");
+  const [targetUserId, setTargetUserId] = useState("");
+  const [matchMode, setMatchMode] = useState(null); // 'peer' | 'ai' | null
   const [topicInterests, setTopicInterests] = useState([]);
   const [manualInterest, setManualInterest] = useState("");
 
@@ -52,69 +120,30 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState("");
 
   // History State
-  const [historySessions, setHistorySessions] = useState(() => {
-    try {
-      const saved = localStorage.getItem("neo_omegle_history");
-      const parsed = saved ? JSON.parse(saved) : [];
-      if (parsed.length === 0) {
-        return [
-          {
-            key: "session_mock_1",
-            strangerAlias: "PixelPirate",
-            strangerAvatarColor: "#66FF66",
-            interests: ["css-art", "retro-gaming", "web-art"],
-            startTime: "06/09/2026, 10:15 AM",
-            messages: [
-              { id: "sys-1", role: "system", text: "Connected with a random stranger! They are interested in css-art, retro-gaming, web-art.", timestamp: "10:15 AM" },
-              { id: "str-1", role: "stranger", text: "ahoy matey! you build css-art with zero external dependencies too?", timestamp: "10:15 AM" },
-              { id: "usr-1", role: "user", text: "Absolutely, thick borders and solid box shadows are my jam!", timestamp: "10:16 AM" },
-              { id: "str-2", role: "stranger", text: "brutal! i love the raw layouts. high contrast rules the web!", timestamp: "10:16 AM" },
-              { id: "sys-2", role: "system", text: "You have disconnected from the chat session.", timestamp: "10:18 AM" }
-            ]
-          },
-          {
-            key: "session_mock_2",
-            strangerAlias: "CosmicGazer",
-            strangerAvatarColor: "#B266FF",
-            interests: ["science-fiction", "stars", "analog-synths"],
-            startTime: "06/09/2026, 09:42 AM",
-            messages: [
-              { id: "sys-3", role: "system", text: "Connected with a random stranger! They are interested in science-fiction, stars, analog-synths.", timestamp: "09:42 AM" },
-              { id: "str-3", role: "stranger", text: "have you ever listened to old analog sci-fi synthesizer soundtracks under a starry sky?", timestamp: "09:42 AM" },
-              { id: "usr-3", role: "user", text: "Yes! Vangelis style is legendary.", timestamp: "09:43 AM" },
-              { id: "str-4", role: "stranger", text: "exactly, tape echo and detuned oscillators create magic! 🪐", timestamp: "09:44 AM" },
-              { id: "sys-4", role: "system", text: "You have disconnected from the chat session.", timestamp: "09:45 AM" }
-            ]
-          },
-          {
-            key: "session_mock_3",
-            strangerAlias: "MemeAlchemist",
-            strangerAvatarColor: "#FF66AA",
-            interests: ["vaporwave", "lofi-hiphop", "retro-gaming"],
-            startTime: "06/08/2026, 11:30 PM",
-            messages: [
-              { id: "sys-5", role: "system", text: "Connected with a random stranger! They are interested in vaporwave, lofi-hiphop, retro-gaming.", timestamp: "11:30 PM" },
-              { id: "str-5", role: "stranger", text: "A E S T H E T I C S. what retro console are you gaming on tonight?", timestamp: "11:31 PM" },
-              { id: "usr-5", role: "user", text: "Standard NES emulation on my custom desktop grid!", timestamp: "11:32 PM" },
-              { id: "str-6", role: "stranger", text: "perfect choice. that brutal color palette is timeless.", timestamp: "11:33 PM" },
-              { id: "sys-6", role: "system", text: "You have disconnected from the chat session.", timestamp: "11:35 PM" }
-            ]
-          }
-        ];
-      }
-      return parsed;
-    } catch {
-      return [];
-    }
-  });
+  const [historySessions, setHistorySessions] = useState(loadHistorySessions);
   const [viewingPastSessionKey, setViewingPastSessionKey] = useState(null);
 
   // References
   const localVideoRef = useRef(null);
+  const peerLandmarksRef = useRef(null);
   const messagesEndRef = useRef(null);
   const audioContextRef = useRef(null);
   const streamRef = useRef(null);
+  const lastLandmarkSendRef = useRef(0);
+  const peerLandmarkStaleTimerRef = useRef(null);
+  const sendPeerLandmarksRef = useRef(null);
+  const [peerIsTracking, setPeerIsTracking] = useState(false);
+  const [opponentLeft, setOpponentLeft] = useState(false);
   const { landmarksRef, isTracking } = useHolisticFaceLandmarks(localVideoRef, cameraActive);
+
+  const clearPeerLandmarks = useCallback(() => {
+    peerLandmarksRef.current = null;
+    setPeerIsTracking(false);
+    if (peerLandmarkStaleTimerRef.current) {
+      clearTimeout(peerLandmarkStaleTimerRef.current);
+      peerLandmarkStaleTimerRef.current = null;
+    }
+  }, []);
 
   // Preset interests for neobrutalist vibe
   const presetInterests = [
@@ -135,7 +164,7 @@ export default function App() {
 
   // Save changes to history sessions in localStorage
   useEffect(() => {
-    localStorage.setItem("neo_omegle_history", JSON.stringify(historySessions));
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(historySessions));
   }, [historySessions]);
 
   // Handle Toast Notifications
@@ -197,6 +226,163 @@ export default function App() {
     onFailBeep: playGameFailBeep,
   });
 
+  const lastConnectedRoomRef = useRef(null);
+  const connectToPeerRef = useRef(null);
+  const matchmakingActionsRef = useRef({
+    sendMatchLeave: () => {},
+    clearMatchedSession: () => {},
+  });
+  const stopGameRef = useRef(() => {});
+
+  const connectToPeer = useCallback((peer) => {
+    setViewingPastSessionKey(null);
+    setIsPlaying(true);
+    setIsMatching(false);
+    setMatchMode('peer');
+    setOpponentLeft(false);
+
+    const peerProfile = {
+      id: peer.id,
+      alias: peer.nickname,
+      nickname: peer.nickname,
+      avatarColor: peer.avatarColor,
+      interests: ['cham-cham-cham'],
+      isPeerMatch: true,
+    };
+
+    setStranger(peerProfile);
+
+    playSynthesizerBeep(523.25, 0.15, "sine");
+    setTimeout(() => playSynthesizerBeep(659.25, 0.15, "sine"), 120);
+    setTimeout(() => playSynthesizerBeep(783.99, 0.25, "sine"), 240);
+
+    const systemWelcome = `Connected with ${peer.nickname} (${peer.id})!`;
+    const initialLog = [
+      {
+        id: "sys-connect",
+        role: "system",
+        text: systemWelcome,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    ];
+    setChatLog(initialLog);
+
+    const sessionKey = `session_${Date.now()}`;
+    const newSession = {
+      key: sessionKey,
+      strangerAlias: peer.nickname,
+      strangerAvatarColor: peer.avatarColor,
+      interests: ['cham-cham-cham'],
+      startTime: new Date().toLocaleString(),
+      messages: initialLog,
+    };
+    setHistorySessions(prev => [newSession, ...prev]);
+    setViewingPastSessionKey(sessionKey);
+    startModelDownload();
+    triggerToast(`Matched with ${peer.nickname}! Turn on camera so they can see you.`);
+  }, [playSynthesizerBeep, triggerToast]);
+
+  connectToPeerRef.current = connectToPeer;
+
+  const matchmaking = useMatchmaking({
+    nickname,
+    onMatchIncoming: ({ fromNickname }) => {
+      triggerToast(`${fromNickname} wants to play Cham Cham Cham!`);
+      playSynthesizerBeep(880, 0.12, "triangle");
+    },
+    onMatchSent: ({ targetId }) => {
+      triggerToast(`Challenge sent to ${targetId}! Waiting for them to accept...`);
+    },
+    onMatchError: (message) => {
+      setIsMatching(false);
+      setIsPlaying(false);
+      lastConnectedRoomRef.current = null;
+      triggerToast(message);
+      playSynthesizerBeep(220, 0.2, "sawtooth");
+    },
+    onMatchDeclined: ({ by, reason }) => {
+      setIsMatching(false);
+      if (by === 'peer') {
+        const msg = reason === 'disconnected'
+          ? 'Your opponent disconnected.'
+          : reason === 'cancelled'
+            ? 'The challenge was cancelled.'
+            : 'Your challenge was declined.';
+        triggerToast(msg);
+
+        if (reason === 'disconnected' && isPlaying && matchMode === 'peer') {
+          setOpponentLeft(true);
+          setStranger((prev) => (prev ? { ...prev, isPeerMatch: false } : null));
+          clearPeerLandmarks();
+          lastConnectedRoomRef.current = null;
+          stopGameRef.current?.();
+          matchmakingActionsRef.current.clearMatchedSession();
+          matchmakingActionsRef.current.sendMatchLeave();
+        } else if (isPlaying && matchMode === 'peer') {
+          setIsPlaying(false);
+          setStranger(null);
+          setChatLog([]);
+          clearPeerLandmarks();
+          lastConnectedRoomRef.current = null;
+          matchmakingActionsRef.current.clearMatchedSession();
+        }
+      }
+      playSynthesizerBeep(220, 0.15, "sawtooth");
+    },
+    onPeerLandmarks: ({ landmarks }) => {
+      const parsed = deserializeFaceLandmarks(landmarks);
+      peerLandmarksRef.current = parsed;
+      setPeerIsTracking(Boolean(parsed?.length));
+
+      if (peerLandmarkStaleTimerRef.current) {
+        clearTimeout(peerLandmarkStaleTimerRef.current);
+      }
+      peerLandmarkStaleTimerRef.current = setTimeout(() => {
+        peerLandmarksRef.current = null;
+        setPeerIsTracking(false);
+      }, PEER_LANDMARK_STALE_MS);
+    },
+  });
+
+  sendPeerLandmarksRef.current = matchmaking.sendPeerLandmarks;
+  matchmakingActionsRef.current = {
+    sendMatchLeave: matchmaking.sendMatchLeave,
+    clearMatchedSession: matchmaking.clearMatchedSession,
+  };
+  stopGameRef.current = chamChamGame.stopGame;
+
+  useEffect(() => {
+    if (!matchmaking.matchedSession) return;
+    if (lastConnectedRoomRef.current === matchmaking.matchedSession.roomId) return;
+
+    lastConnectedRoomRef.current = matchmaking.matchedSession.roomId;
+    connectToPeerRef.current?.(matchmaking.matchedSession.peer);
+  }, [matchmaking.matchedSession]);
+
+  useEffect(() => {
+    if (!matchmaking.matchedSession || !cameraActive || !isPlaying) {
+      return undefined;
+    }
+
+    let rafId;
+    const tick = () => {
+      const now = performance.now();
+      if (now - lastLandmarkSendRef.current >= PEER_LANDMARK_SEND_INTERVAL_MS) {
+        const serialized = serializeFaceLandmarks(landmarksRef.current);
+        if (serialized) {
+          const sent = sendPeerLandmarksRef.current?.(serialized);
+          if (sent) {
+            lastLandmarkSendRef.current = now;
+          }
+        }
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [matchmaking.matchedSession, cameraActive, isPlaying, landmarksRef]);
+
   // Setup Web Camera
   const toggleCamera = async () => {
     if (cameraActive) {
@@ -246,9 +432,9 @@ export default function App() {
     }
   }, [cameraActive]);
 
-  // Enter matching mode
-  const startMatching = () => {
-    // Exit past view
+  // Enter random AI matching mode
+  const startRandomMatching = () => {
+    setMatchMode('ai');
     setViewingPastSessionKey(null);
     setIsPlaying(true);
     setIsMatching(true);
@@ -256,7 +442,6 @@ export default function App() {
     setChatLog([]);
     playSynthesizerBeep(880, 0.1, "sine");
 
-    // Dynamic phase text while matching
     const phases = [
       "Securing connection interfaces...",
       "Analyzing 1,284 neobrutalist graphic grid nodes...",
@@ -278,6 +463,42 @@ export default function App() {
         retrieveStrangerMatch();
       }
     }, 100);
+  };
+
+  const startPeerMatching = () => {
+    const trimmedTargetId = targetUserId.trim();
+    if (!trimmedTargetId) {
+      triggerToast("Enter your friend's player ID first.");
+      playSynthesizerBeep(220, 0.15, "sawtooth");
+      return;
+    }
+
+    if (!matchmaking.isSocketConnected) {
+      triggerToast("Matchmaking server is still connecting. Try again in a moment.");
+      return;
+    }
+
+    setMatchMode('peer');
+    setViewingPastSessionKey(null);
+    setIsPlaying(true);
+    setIsMatching(true);
+    setStranger(null);
+    setChatLog([]);
+    setMatchingStatus(`Sending challenge to ${trimmedTargetId}...`);
+    playSynthesizerBeep(880, 0.1, "sine");
+
+    const sent = matchmaking.sendMatchRequest(trimmedTargetId);
+    if (!sent) {
+      setIsMatching(false);
+      setIsPlaying(false);
+    }
+  };
+
+  const cancelPeerMatching = () => {
+    matchmaking.cancelWaiting();
+    setIsMatching(false);
+    setIsPlaying(false);
+    setMatchMode(null);
   };
 
   // Fetch the randomized Stranger match from server
@@ -358,6 +579,13 @@ export default function App() {
     setCameraActive(false);
     setIsMatching(false);
     setIsPlaying(false);
+    setMatchMode(null);
+    setOpponentLeft(false);
+    setStranger(null);
+    lastConnectedRoomRef.current = null;
+    matchmaking.sendMatchLeave();
+    matchmaking.clearMatchedSession();
+    clearPeerLandmarks();
   };
 
   // Stop current matching chat or exit simulator
@@ -392,6 +620,10 @@ export default function App() {
     }
 
     setStranger(null);
+    matchmaking.sendMatchLeave();
+    lastConnectedRoomRef.current = null;
+    matchmaking.clearMatchedSession();
+    clearPeerLandmarks();
     triggerToast("Chat session archive successfully stored in sidebar!");
   };
 
@@ -414,6 +646,18 @@ export default function App() {
 
     const newLogs = [...chatLog, userMsgNode];
     setChatLog(newLogs);
+
+    if (stranger?.isPeerMatch) {
+      if (viewingPastSessionKey) {
+        setHistorySessions(prev => prev.map(s => {
+          if (s.key === viewingPastSessionKey) {
+            return { ...s, messages: newLogs };
+          }
+          return s;
+        }));
+      }
+      return;
+    }
 
     // Save progressively to history
     if (viewingPastSessionKey) {
@@ -564,13 +808,45 @@ export default function App() {
   // Reset entire history database
   const clearAllHistory = () => {
     if (window.confirm("Are you positive you'd like to completely purge your brutalist chat history?")) {
-      setHistorySessions([]);
+      setHistorySessions(MOCK_SESSIONS);
       setViewingPastSessionKey(null);
       setStranger(null);
       setChatLog([]);
       triggerToast("All historical data purged successfully!");
       playSynthesizerBeep(180, 0.4, "sawtooth");
     }
+  };
+
+  const handleCopyUserId = async () => {
+    const copied = await matchmaking.copyUserId();
+    triggerToast(copied ? "Player ID copied to clipboard!" : "Could not copy player ID.");
+    if (copied) playSynthesizerBeep(700, 0.08, "sine");
+  };
+
+  const handleAcceptInvite = () => {
+    const invite = matchmaking.pendingInvite;
+    if (!invite) return;
+
+    setMatchMode('peer');
+    setIsPlaying(true);
+    setIsMatching(true);
+    setMatchingStatus(`Accepting challenge from ${invite.fromNickname}...`);
+
+    const accepted = matchmaking.acceptInvite(invite.inviteId);
+    if (!accepted) {
+      setIsMatching(false);
+      setIsPlaying(false);
+    }
+  };
+
+  const handleDeclineInvite = () => {
+    if (!matchmaking.pendingInvite) return;
+    matchmaking.declineInvite(matchmaking.pendingInvite.inviteId);
+    triggerToast("Challenge declined.");
+  };
+
+  const toggleLandingCamera = async () => {
+    await toggleCamera();
   };
 
   return (
@@ -580,6 +856,26 @@ export default function App() {
         <div className="neo-toast" id="system-toast">
           <Terminal size={18} />
           <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {matchmaking.pendingInvite && (
+        <div className="invite-overlay" id="incoming-invite-overlay">
+          <div className="invite-banner invite-banner--modal">
+            <p className="invite-banner-title">Incoming Challenge!</p>
+            <p>
+              <strong>{matchmaking.pendingInvite.fromNickname}</strong>
+              {' '}({matchmaking.pendingInvite.fromId}) wants to play!
+            </p>
+            <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center", flexWrap: "wrap", marginTop: "1rem" }}>
+              <button type="button" className="neo-btn neo-btn-sm neo-btn-green" onClick={handleAcceptInvite}>
+                Accept
+              </button>
+              <button type="button" className="neo-btn neo-btn-sm" onClick={handleDeclineInvite}>
+                Decline
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -634,31 +930,120 @@ export default function App() {
 
                 {/* Set user credential box */}
                 <div className="setup-box" style={{ maxWidth: "500px", margin: "0 auto 2.5rem auto", width: "100%" }}>
-                  <div>
+                  <div style={{ marginBottom: "1rem" }}>
                     <label className="form-label" htmlFor="user-moniker">Nickname</label>
                     <input 
                       type="text" 
                       id="user-moniker"
                       className="form-input" 
-                      // value={nickname}
+                      value={nickname}
                       onChange={(e) => setNickname(e.target.value)}
                       placeholder="e.g. Cham_Go_su"
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: "1rem" }}>
+                    <label className="form-label" htmlFor="user-player-id">Your Player ID (auto-assigned)</label>
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      <input
+                        type="text"
+                        id="user-player-id"
+                        className="form-input"
+                        value={matchmaking.userId || "Assigning..."}
+                        readOnly
+                      />
+                      <button
+                        type="button"
+                        className="neo-btn neo-btn-sm neo-btn-cyan"
+                        onClick={handleCopyUserId}
+                        disabled={!matchmaking.userId}
+                        title="Copy your player ID"
+                      >
+                        <Copy size={14} />
+                      </button>
+                    </div>
+                    <p style={{ fontSize: "0.75rem", marginTop: "0.35rem", opacity: 0.75 }}>
+                      Copy and share this ID. Type your friend&apos;s ID in the field below.
+                      {matchmaking.isSocketConnected ? " Online." : " Connecting..."}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="form-label" htmlFor="target-player-id">Friend&apos;s Player ID</label>
+                    <input
+                      type="text"
+                      id="target-player-id"
+                      className="form-input"
+                      value={targetUserId}
+                      onChange={(e) => setTargetUserId(e.target.value)}
+                      placeholder="e.g. neo_a7x9k2"
                     />
                   </div>
                 </div>
 
                 {/* Action grid block buttons */}
-                <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", justifyContent: "center" }}>
+                <div className="landing-actions" style={{ display: "flex", gap: "1rem", flexWrap: "wrap", justifyContent: "center", alignItems: "center", width: "100%" }}>
                   <button 
                     className="neo-btn neo-btn-pink"
                     style={{ fontSize: "1.4rem", padding: "1rem 2.5rem" }}
-                    onClick={startMatching}
+                    onClick={startPeerMatching}
                     id="btn-start-match"
                   >
-                    <Video size={24} />
-                    Start Matchmaking
+                    <UserPlus size={24} />
+                    Challenge Friend
+                  </button>
+
+                  <button
+                    type="button"
+                    className="neo-btn neo-btn-sm"
+                    style={{ backgroundColor: cameraActive ? "var(--color-green)" : "var(--color-white)" }}
+                    onClick={toggleLandingCamera}
+                    id="btn-test-camera"
+                    title="Test your webcam without starting a match"
+                  >
+                    <Camera size={16} />
+                    {cameraActive ? "Cam On" : "Test Cam"}
                   </button>
                 </div>
+
+                <div style={{ marginTop: "1rem", textAlign: "center" }}>
+                  <button
+                    type="button"
+                    className="neo-btn neo-btn-sm"
+                    style={{ fontSize: "0.8rem", opacity: 0.85 }}
+                    onClick={startRandomMatching}
+                    id="btn-random-ai-match"
+                  >
+                    <Video size={14} />
+                    Practice vs AI
+                  </button>
+                </div>
+
+                {cameraActive && !isPlaying && (
+                  <div className="landing-camera-preview" id="landing-camera-preview">
+                    <div className="landing-camera-preview-label">
+                      Camera preview ({nickname})
+                    </div>
+                    <video
+                      ref={localVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      style={{ display: 'none' }}
+                    />
+                    <MediaPipeHolisticCanvas
+                      videoRef={localVideoRef}
+                      isActive={cameraActive}
+                      label={nickname}
+                      filterName={selectedFilter}
+                      landmarksRef={landmarksRef}
+                      isTracking={isTracking}
+                      gameActive={false}
+                      gameCue={null}
+                      countdown={null}
+                    />
+                  </div>
+                )}
 
                 {/* Security Warning Disclaimer */}
                 
@@ -677,13 +1062,23 @@ export default function App() {
                   </div>
                   
                   <h3 className="hero-title" style={{ fontSize: "1.8rem", marginBottom: "0.5rem" }}>
-                    Searching for a Match
+                    {matchMode === 'peer'
+                      ? (matchmaking.waitingTargetId
+                        ? `Waiting for ${matchmaking.waitingTargetId}...`
+                        : matchingStatus)
+                      : "Searching for a Match"}
                   </h3>
+
+                  <p style={{ fontSize: "0.95rem", maxWidth: "420px", textAlign: "center", opacity: 0.85 }}>
+                    {matchMode === 'peer'
+                      ? "Your friend will see a popup invite. They must click Accept."
+                      : matchingStatus}
+                  </p>
 
                   <button 
                     className="neo-btn neo-btn-sm" 
                     style={{ marginTop: "2.5rem", backgroundColor: "var(--color-orange)", color: "white" }}
-                    onClick={() => setIsPlaying(false)}
+                    onClick={matchMode === 'peer' ? cancelPeerMatching : () => setIsPlaying(false)}
                   >
                     Cancel Matchmaking
                   </button>
@@ -711,7 +1106,7 @@ export default function App() {
                 </div>
 
                 {/* Video Grid row */}
-                <div className="video-frame-container">
+                <div className={`video-frame-container${opponentLeft ? ' video-frame-container--solo' : ''}`}>
                   {/* Visual frame 1: YOU */}
                   <div className="video-frame">
                     <div className="video-label-tag">
@@ -739,32 +1134,66 @@ export default function App() {
                     />
                   </div>
                   
+                  {!opponentLeft && (
                   <div className="video-frame">
-                    {/* <div className="video-label-tag video-label-tag-pink">
-                      Hand ({nickname})
+                    <div className="video-label-tag video-label-tag-pink">
+                      {stranger?.isPeerMatch
+                        ? `${stranger.nickname || stranger.alias} (remote)`
+                        : 'Opponent'}
                     </div>
 
-                    <MediaPipeHandCanvas
-                      videoRef={localVideoRef}
-                      isActive={cameraActive}
-                      label={nickname}
-                    />
-
-                    {cameraActive && (
-                      <video
-                        ref={localVideoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        style={{ display: 'none' }}
+                    {stranger?.isPeerMatch ? (
+                      <MediaPipeHolisticCanvas
+                        isActive
+                        label={stranger.nickname || stranger.alias || 'Opponent'}
+                        landmarksRef={peerLandmarksRef}
+                        isTracking={peerIsTracking}
+                        gameActive={false}
+                        gameCue={null}
+                        countdown={null}
+                        remoteView
                       />
-                    )} */}
+                    ) : (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: '#FF85B3',
+                          border: '3px solid #000',
+                          boxSizing: 'border-box',
+                          padding: '1.5rem',
+                          textAlign: 'center',
+                        }}
+                      >
+                        <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.8rem' }}>
+                          Challenge a friend to see their 3D face model here
+                        </div>
+                      </div>
+                    )}
                   </div>
+                  )}
 
                 </div>
 
                 {/* Dynamic Action row under visual feed */}
                 <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+                  {opponentLeft && (
+                    <span
+                      style={{
+                        fontFamily: '"JetBrains Mono", monospace',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Opponent left
+                    </span>
+                  )}
+
                   {chamChamGame.showScore && (
                     <div className={`game-score-display ${chamChamGame.gamePhase === 'gameOver' ? 'game-score-display--over' : ''}`}>
                       Score: {chamChamGame.score}
@@ -772,28 +1201,37 @@ export default function App() {
                     </div>
                   )}
 
+                  {!opponentLeft && (
+                    <button
+                      className={`neo-btn neo-btn-sm ${chamChamGame.canStart && cameraActive && chamChamGame.gamePhase !== 'playing' ? 'neo-btn-green' : ''}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.25rem",
+                        padding: "0.6rem 1rem",
+                        opacity: chamChamGame.canStart && cameraActive && chamChamGame.gamePhase !== 'playing' ? 1 : 0.45,
+                        cursor: chamChamGame.canStart && cameraActive && chamChamGame.gamePhase !== 'playing' ? 'pointer' : 'not-allowed',
+                      }}
+                      onClick={chamChamGame.startGame}
+                      disabled={!cameraActive || chamChamGame.gamePhase === 'playing'}
+                      title={chamChamGame.canStart ? 'Start the game' : 'Tilt your head left or right to start'}
+                    >
+                      <Play size={14} />
+                      <span>Start</span>
+                    </button>
+                  )}
+
                   <button
-                    className={`neo-btn neo-btn-sm ${chamChamGame.canStart && cameraActive && chamChamGame.gamePhase !== 'playing' ? 'neo-btn-green' : ''}`}
+                    type="button"
+                    className={`neo-btn neo-btn-sm${opponentLeft ? ' neo-btn-green' : ''}`}
                     style={{
                       display: "flex",
                       alignItems: "center",
                       gap: "0.25rem",
-                      padding: "0.6rem 1rem",
-                      opacity: chamChamGame.canStart && cameraActive && chamChamGame.gamePhase !== 'playing' ? 1 : 0.45,
-                      cursor: chamChamGame.canStart && cameraActive && chamChamGame.gamePhase !== 'playing' ? 'pointer' : 'not-allowed',
+                      padding: opponentLeft ? "0.75rem 1.25rem" : "0.6rem 1rem",
                     }}
-                    onClick={chamChamGame.startGame}
-                    disabled={!cameraActive || chamChamGame.gamePhase === 'playing'}
-                    title={chamChamGame.canStart ? 'Start the game' : 'Tilt your head left or right to start'}
-                  >
-                    <Play size={14} />
-                    <span>Start</span>
-                  </button>
-
-                  <button 
-                    className="neo-btn neo-btn-sm" 
-                    style={{ backgroundColor: "var(--color-orange)", display: "flex", alignItems: "center", gap: "0.25rem", padding: "0.6rem 1rem" }}
                     onClick={quitToLanding}
+                    title="Leave match and return to landing page"
                   >
                     <X size={14} />
                     <span>Quit</span>
@@ -821,38 +1259,53 @@ export default function App() {
           </div>
 
           <div className="sidebar-scroller">
-            {/* Box element inside showing the name of the previous partner/session, and the time */}
-            
-
             {historySessions.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "1.5rem 1rem", fontStyle: "italic", fontSize: "0.8rem", color: "#666" }}>
+              <div style={{ textAlign: 'center', padding: '1.5rem 1rem', fontStyle: 'italic', fontSize: '0.8rem', color: '#666' }}>
                 No automated saved archives found. Connect and exchange details to log a session.
               </div>
             ) : (
               historySessions.map((session) => {
                 const isActive = viewingPastSessionKey === session.key;
-                // Get last message snippet
-                const textMsgs = session.messages.filter(m => m.role === "user" || m.role === "stranger");
-                const lastSnippet = textMsgs.length > 0 ? textMsgs[textMsgs.length - 1].text : "No messages saved";
-                
+                const textMsgs = session.messages.filter((m) => m.role === 'user' || m.role === 'stranger');
+                const lastSnippet = textMsgs.length > 0 ? textMsgs[textMsgs.length - 1].text : 'No messages saved';
+
                 return (
-                  <div 
-                    key={session.key} 
-                    className={`past-session-item ${isActive ? "active" : ""}`}
+                  <div
+                    key={session.key}
+                    className={`past-session-item ${isActive ? 'active' : ''}`}
                     style={{ borderLeft: `6px solid ${session.strangerAvatarColor}` }}
+                    onClick={() => selectPastSession(session)}
                   >
                     <div className="past-session-topic">
-                      <span style={{ fontWeight: "700" }}>{session.strangerAlias}</span>
+                      <span style={{ fontWeight: '700' }}>{session.strangerAlias}</span>
+                      <button
+                        type="button"
+                        className="neo-btn neo-btn-sm"
+                        style={{ border: '2px solid #000', padding: '0.15rem', boxShadow: 'none' }}
+                        onClick={(e) => deleteHistorySession(session.key, e)}
+                        title="Delete archive"
+                      >
+                        <Trash2 size={12} />
+                      </button>
                     </div>
-                    <div className="past-session-date">
-                      {session.startTime}
-                    </div>
-                    <div className="past-session-snippet">
-                    </div>
+                    <div className="past-session-date">{session.startTime}</div>
+                    <div className="past-session-snippet">{lastSnippet}</div>
                   </div>
                 );
               })
-            )}\
+            )}
+          </div>
+
+          <div className="sidebar-footer-clearing">
+            <button
+              type="button"
+              className="neo-btn neo-btn-sm"
+              style={{ width: '100%' }}
+              onClick={clearAllHistory}
+            >
+              <Trash2 size={14} />
+              <span>Reset to demo archives</span>
+            </button>
           </div>
 
         </aside>
