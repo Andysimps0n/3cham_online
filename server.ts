@@ -31,7 +31,7 @@ const pendingInvites = new Map<string, PendingInvite>();
 const outboundInvitesByUser = new Map<string, string>();
 
 function generateUserId(): string {
-  return `neo_${Math.random().toString(36).substring(2, 8)}`;
+  return Math.floor(Math.random() * 100000).toString().padStart(5, '0');
 }
 
 function generateInviteId(): string {
@@ -39,7 +39,7 @@ function generateInviteId(): string {
 }
 
 function generateRoomId(): string {
-  return `room_${Math.random().toString(36).substring(2, 10)}`;
+  return `${Math.random().toString(36).substring(2, 10)}`;
 }
 
 function avatarColorFromId(userId: string): string {

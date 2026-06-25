@@ -21,7 +21,8 @@ import {
   Info,
   Play,
   Copy,
-  UserPlus
+  UserPlus,
+  Home
 } from 'lucide-react';
 import { startModelDownload } from './assets/preloadModel';
 import MediaPipeHolisticCanvas from './components/MediaPipeHolisticCanvas';
@@ -161,11 +162,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("neo_user_name", nickname);
   }, [nickname]);
-
-  // Save changes to history sessions in localStorage
-  useEffect(() => {
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(historySessions));
-  }, [historySessions]);
 
   // Handle Toast Notifications
   const triggerToast = (msg) => {
@@ -849,6 +845,8 @@ export default function App() {
     await toggleCamera();
   };
 
+  const isLandingTestCam = cameraActive && !isPlaying;
+
   return (
     <div className="neo-app">
       {/* Toast alert system widget */}
@@ -880,36 +878,7 @@ export default function App() {
       )}
 
       {/* Top Brand Header Bar */}
-      <header className="neo-header" id="app-header">
-        <div className="neo-logo-group" onClick={() => setIsPlaying(false)}>
-          <div className="neo-logo" style={{ cursor: "pointer" }}>
-            --
-          </div>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          {/* Audio volume switch */}
-
-
-
-          {/* Pull history arrow trigger sitting on right top corner */}
-          {!sidebarOpen && (
-            <button
-              id="pull-history-btn"
-              className="neo-btn neo-btn-sm"
-              style={{ backgroundColor: "var(--color-cyan)", border: "var(--neo-border-thin)", boxShadow: "var(--neo-shadow-sm)" }}
-              onClick={() => {
-                setSidebarOpen(true);
-                playSynthesizerBeep(600, 0.08, "triangle");
-              }}
-              title="Pull out Chat Archives"
-            >
-              <ChevronLeft size={16} />
-              <span>HISTORY</span>
-            </button>
-          )}
-        </div>
-      </header>
+s
 
       {/* Main Container Area */}
       <div className="neo-main-content">
@@ -917,9 +886,54 @@ export default function App() {
         <div className="neo-view-viewport">
           {!isPlaying ? (
             /* ================= LANDING SCREEN ================= */
-            <div className="landing-page" id="landing-screen">
-              <div className="hero-card">
-                
+            <div className={`landing-page${isLandingTestCam ? ' landing-page--test-cam' : ''}`} id="landing-screen">
+              <div className={`hero-card${isLandingTestCam ? ' hero-card--test-cam' : ''}`}>
+                {isLandingTestCam ? (
+                  <>
+                    <h1 className="hero-title hero-title--compact">Test Cam</h1>
+                    <p className="hero-subtitle hero-subtitle--compact">
+                      Point your face at the camera for tracking. <br />
+                      Adjusting seat to center your face. 
+                    </p>
+
+                    <div className="landing-camera-preview landing-camera-preview--compact" id="landing-camera-preview">
+                      <div className="landing-camera-preview-label">
+                        Camera preview ({nickname})
+                      </div>
+                      <video
+                        ref={localVideoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        style={{ display: 'none' }}
+                      />
+                      <MediaPipeHolisticCanvas
+                        videoRef={localVideoRef}
+                        isActive={cameraActive}
+                        label={nickname}
+                        filterName={selectedFilter}
+                        landmarksRef={landmarksRef}
+                        isTracking={isTracking}
+                        gameActive={false}
+                        gameCue={null}
+                        countdown={null}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      className="neo-btn neo-btn-sm"
+                      style={{ marginTop: "1.25rem" }}
+                      onClick={toggleLandingCamera}
+                      id="btn-back-to-home"
+                      title="Turn off camera and return to home"
+                    >
+                      <Home size={16} />
+                      Back to Home
+                    </button>
+                  </>
+                ) : (
+                  <>
                 <h1 className="hero-title">
                   CHAM CHAM CHAM ONLINE
                 </h1>
@@ -976,7 +990,7 @@ export default function App() {
                       className="form-input"
                       value={targetUserId}
                       onChange={(e) => setTargetUserId(e.target.value)}
-                      placeholder="e.g. neo_a7x9k2"
+                      placeholder="e.g. 42815"
                     />
                   </div>
                 </div>
@@ -993,59 +1007,39 @@ export default function App() {
                     Challenge Friend
                   </button>
 
-                  <button
-                    type="button"
-                    className="neo-btn neo-btn-sm"
-                    style={{ backgroundColor: cameraActive ? "var(--color-green)" : "var(--color-white)" }}
-                    onClick={toggleLandingCamera}
-                    id="btn-test-camera"
-                    title="Test your webcam without starting a match"
-                  >
-                    <Camera size={16} />
-                    {cameraActive ? "Cam On" : "Test Cam"}
-                  </button>
+
                 </div>
 
                 <div style={{ marginTop: "1rem", textAlign: "center" }}>
                   <button
                     type="button"
                     className="neo-btn neo-btn-sm"
-                    style={{ fontSize: "0.8rem", opacity: 0.85 }}
+                    style={{ marginRight: "1rem" }}
                     onClick={startRandomMatching}
                     id="btn-random-ai-match"
                   >
-                    <Video size={14} />
+                    <Video size={16} />
                     Practice vs AI
                   </button>
-                </div>
 
-                {cameraActive && !isPlaying && (
-                  <div className="landing-camera-preview" id="landing-camera-preview">
-                    <div className="landing-camera-preview-label">
-                      Camera preview ({nickname})
-                    </div>
-                    <video
-                      ref={localVideoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      style={{ display: 'none' }}
-                    />
-                    <MediaPipeHolisticCanvas
-                      videoRef={localVideoRef}
-                      isActive={cameraActive}
-                      label={nickname}
-                      filterName={selectedFilter}
-                      landmarksRef={landmarksRef}
-                      isTracking={isTracking}
-                      gameActive={false}
-                      gameCue={null}
-                      countdown={null}
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    className="neo-btn neo-btn-sm"
+                    onClick={toggleLandingCamera}
+                    id="btn-test-camera"
+                    title="Test your webcam without starting a match"
+                  >
+                    <Camera size={16} />
+                    Test Cam
+                  </button>
+
+
+
+                  {/* here */}
+                </div>
+                  </>
                 )}
 
-                {/* Security Warning Disclaimer */}
                 
               </div>
             </div>

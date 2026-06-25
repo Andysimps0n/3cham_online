@@ -26,9 +26,9 @@ export function getFaceDirection(landmarks) {
   const rightEye = mediaPipeToR3F(landmarks[LM.RIGHT_EYE]);
   const x = Math.floor(((leftEye.x + rightEye.x) / 2) * 100);
 
-  if ((5 < x) && (x < 7)) return 'center';
-  if (x <= 5) return 'left';
-  if (x > 7) return 'right';
+  if ((-3 < x) && (x < 5)) return 'center';
+  if (x <= -3) return 'left';
+  if (x > 5 ) return 'right';
 }
 
 export const GAME_CUE_DIRECTIONS = ['left', 'center', 'right'];

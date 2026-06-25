@@ -12,7 +12,7 @@ function avatarColorFromId(userId) {
 }
 
 function createFallbackUserId() {
-  return `neo_${Math.random().toString(36).substring(2, 8)}`;
+  return Math.floor(Math.random() * 100000).toString().padStart(5, '0');
 }
 
 export function useMatchmaking({ nickname, onMatchConnected, onMatchIncoming, onMatchSent, onMatchError, onMatchDeclined, onPeerLandmarks }) {

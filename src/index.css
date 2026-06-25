@@ -55,10 +55,8 @@ body {
 
 /* App Wrapper Layout */
 .neo-app {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  position: relative;
+  overflow: hidden;
+  height: 100vh;
 }
 
 /* Branded Header */
@@ -130,12 +128,14 @@ body {
 }
 
 /* Layout Utilities */
-.neo-main-content {
-  display: flex;
-  flex: 1;
-  position: relative;
-  height: calc(100vh - 78px);
+.neo-main-content,
+.neo-view-viewport {
+  min-height: 0;
   overflow: hidden;
+}
+
+.neo-main-content {
+  flex: 1;
 }
 
 .neo-view-viewport {
@@ -143,9 +143,7 @@ body {
   display: flex;
   flex-direction: column;
   position: relative;
-  overflow: hidden;
   height: 100%;
-  min-height: 0;
 }
 
 /* Landing Page Hero Grid */
@@ -222,6 +220,13 @@ body {
   overflow: hidden;
   min-height: 220px;
   aspect-ratio: 4 / 3;
+  position: relative;
+}
+
+.landing-camera-preview--compact {
+  margin: 0 auto;
+  max-width: 300px;
+  min-height: 180px;
 }
 
 .landing-camera-preview-label {
@@ -257,6 +262,11 @@ body {
   text-transform: uppercase;
 }
 
+.hero-title--compact {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
 .hero-title span {
   background-color: var(--color-pink);
   color: var(--color-white);
@@ -274,6 +284,22 @@ body {
   margin-left: auto;
   margin-right: auto;
   font-weight: 500;
+}
+
+.hero-subtitle--compact {
+  font-size: 0.95rem;
+  margin-bottom: 1rem;
+}
+
+.landing-page--test-cam {
+  padding: 1rem 1.5rem 1.5rem;
+  justify-content: center;
+}
+
+.hero-card--test-cam {
+  padding: 1.5rem 1.25rem;
+  margin-bottom: 0;
+  max-width: 600px;
 }
 
 /* Form Settings on Landing */
@@ -295,32 +321,55 @@ body {
   .setup-grid {
     grid-template-columns: 1fr;
   }
+
   .hero-title {
     font-size: 2.5rem;
   }
+
+  .hero-title--compact {
+    font-size: 1.65rem;
+  }
+
   .landing-page {
     padding: 1.25rem 1rem 2.5rem;
   }
+
+  .landing-page--test-cam {
+    padding: 0.75rem 1rem 1.25rem;
+  }
+
   .hero-card {
     padding: 1.5rem 1rem 2rem;
     margin-bottom: 1rem;
   }
+
+  .hero-card--test-cam {
+    padding: 1.25rem 1rem;
+  }
+
   .setup-box {
     padding: 1rem;
     margin-bottom: 1.5rem;
   }
+
   .landing-actions {
     width: 100%;
   }
+
   .landing-actions .neo-btn-pink {
     width: 100%;
     justify-content: center;
     font-size: 1.1rem !important;
     padding: 0.85rem 1.25rem !important;
   }
+
   .landing-camera-preview {
     max-width: 100%;
     min-height: 200px;
+  }
+
+  .landing-camera-preview--compact {
+    min-height: 160px;
   }
 }
 
@@ -342,9 +391,13 @@ body {
   background: var(--color-white);
   outline: none;
 }
+.form-input:focus,
+.chat-text-input:focus {
+  border-color: var(--color-dark);
+}
+
 .form-input:focus {
   background-color: #FFFFED;
-  border-color: var(--color-dark);
   box-shadow: var(--neo-shadow-sm);
 }
 
@@ -453,13 +506,6 @@ body {
   width: 100%;
 }
 
-@media (max-width: 768px) {
-  .video-frame-container {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr 1fr;
-  }
-}
-
 .video-frame {
   background-color: var(--color-dark);
   border: var(--neo-border);
@@ -470,6 +516,26 @@ body {
   align-items: center;
   justify-content: center;
   height: 300px;
+}
+
+@media (max-width: 768px) {
+  .video-frame-container {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .video-frame-container--solo {
+    max-width: 100%;
+  }
+
+  .video-frame {
+    width: 100%;
+    height: auto;
+    min-height: 200px;
+    aspect-ratio: 4 / 3;
+  }
 }
 
 .video-element {
@@ -619,11 +685,15 @@ body {
   margin-bottom: 0.35rem;
 }
 
+.model-boot-screen__hint,
+.model-load-overlay__hint {
+  font-family: var(--font-mono);
+  opacity: 0.85;
+}
+
 .model-boot-screen__hint {
   margin-top: 0.75rem;
-  font-family: var(--font-mono);
   font-size: 0.75rem;
-  opacity: 0.85;
 }
 
 .model-load-overlay {
@@ -679,16 +749,14 @@ body {
 }
 
 .model-load-overlay__percent {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.75rem;
   font-weight: 700;
 }
 
 .model-load-overlay__hint {
   margin-top: 0.35rem;
-  font-family: 'JetBrains Mono', monospace;
   font-size: 0.65rem;
-  opacity: 0.85;
 }
 
 .game-countdown-overlay {
@@ -1059,9 +1127,14 @@ body {
   transform: translate(-1px, -1px);
   box-shadow: var(--neo-shadow-sm);
 }
-.previous-match-card.active {
+.previous-match-card.active,
+.past-session-item.active {
   background-color: #E6F8FF;
   border-width: 3px;
+}
+
+.past-session-item.active {
+  border-color: var(--color-dark);
 }
 
 .previous-match-card-empty {
@@ -1156,11 +1229,6 @@ body {
 .past-session-item:hover {
   background-color: #FFFFED;
   transform: scale(1.02);
-}
-.past-session-item.active {
-  background-color: #E6F8FF;
-  border-color: var(--color-dark);
-  border-width: 3px;
 }
 
 .past-session-topic {

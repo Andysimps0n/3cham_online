@@ -179,7 +179,7 @@ export default function MediaPipeHolisticCanvas({
           <div ref={rightGradientRef} className="face-direction-gradient face-direction-gradient--right" />
           <div ref={centerGradientRef} className="face-direction-gradient face-direction-gradient--center" />
           <div ref={readyBadgeRef} className="face-direction-status-badge face-direction-status-badge--ready">
-            Ready
+            Center
           </div>
           <div ref={leftBadgeRef} className="face-direction-status-badge face-direction-status-badge--side">
             Left
