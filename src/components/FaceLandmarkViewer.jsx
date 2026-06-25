@@ -103,12 +103,20 @@ function ModelLoadOverlay({ progress, phase, error }) {
   );
 }
 
-function TrackingWarmupOverlay() {
+function TrackingWarmupOverlay({ remoteView = false }) {
   return (
-    <Html center>
+    <Html
+      center
+      zIndexRange={remoteView ? [2, 0] : [40, 0]}
+      className={remoteView ? 'face-tracking-warmup-html face-tracking-warmup-html--remote' : 'face-tracking-warmup-html'}
+    >
       <div className="model-load-overlay">
-        <div className="model-load-overlay__title">Warming up face tracking...</div>
-        <div className="model-load-overlay__hint">Point your face at the camera</div>
+        <div className="model-load-overlay__title">
+          {remoteView ? 'Waiting for opponent...' : 'Warming up face tracking...'}
+        </div>
+        <div className="model-load-overlay__hint">
+          {remoteView ? 'Peer camera feed pending' : 'Point your face at the camera'}
+        </div>
       </div>
     </Html>
   );
@@ -187,6 +195,7 @@ function SceneContent({
   modelPhase,
   modelError,
   isTracking,
+  remoteView,
 }) {
   const modelReady = modelStatus === 'ready';
   const showModel = modelReady && isTracking;
@@ -202,7 +211,7 @@ function SceneContent({
         <ModelLoadOverlay progress={modelProgress} phase={modelPhase} error={modelError} />
       )}
 
-      {modelReady && !isTracking && <TrackingWarmupOverlay />}
+      {modelReady && !isTracking && <TrackingWarmupOverlay remoteView={remoteView} />}
 
       <FaceOrientedModel landmarksRef={landmarksRef} visible={visible}>
         {showModel && (
@@ -215,7 +224,12 @@ function SceneContent({
   );
 }
 
-export default function FaceLandmarkViewer({ landmarksRef, visible = true, isTracking = false }) {
+export default function FaceLandmarkViewer({
+  landmarksRef,
+  visible = true,
+  isTracking = false,
+  remoteView = false,
+}) {
   const { progress, phase, status, error } = useModelPreload();
 
   return (
@@ -232,6 +246,7 @@ export default function FaceLandmarkViewer({ landmarksRef, visible = true, isTra
         modelPhase={phase}
         modelError={error}
         isTracking={isTracking}
+        remoteView={remoteView}
       />
     </Canvas>
   );

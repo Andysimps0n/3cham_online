@@ -29,6 +29,7 @@ import MediaPipeHolisticCanvas from './components/MediaPipeHolisticCanvas';
 import MediaPipeHandCanvas from './components/MediaPipeHandCanvas';
 import { useHolisticFaceLandmarks } from './hooks/useHolisticFaceLandmarks';
 import { useChamChamGame } from './hooks/useChamChamGame';
+import { useAttackDefendGame } from './hooks/useAttackDefendGame';
 import { useMatchmaking } from './hooks/useMatchmaking';
 import {
   deserializeFaceLandmarks,
@@ -215,6 +216,40 @@ export default function App() {
     playSynthesizerBeep(160, 0.45, 'sawtooth');
   }, [soundEnabled]);
 
+  // --- Attack-Defend sound effects ---
+  // A "bling" is a quick two-tone rising chime. The second nod reuses the same
+  // shape but starts higher, so it clearly sounds "higher pitched".
+  const playBling = useCallback((baseFreq) => {
+    if (!soundEnabled) return;
+    playSynthesizerBeep(baseFreq, 0.07, 'sine');
+    setTimeout(() => playSynthesizerBeep(baseFreq * 1.5, 0.13, 'sine'), 60);
+  }, [soundEnabled]);
+
+  const playNod1Beep = useCallback(() => playBling(784), [playBling]); // G5
+  const playNod2Beep = useCallback(() => playBling(1175), [playBling]); // D6 (higher)
+
+  const playAttackScoredBeep = useCallback(() => {
+    if (!soundEnabled) return;
+    playSynthesizerBeep(523.25, 0.07, 'square');
+    setTimeout(() => playSynthesizerBeep(659.25, 0.07, 'square'), 70);
+    setTimeout(() => playSynthesizerBeep(1046.5, 0.18, 'square'), 150);
+  }, [soundEnabled]);
+
+  const playRoleSwapBeep = useCallback(() => {
+    if (!soundEnabled) return;
+    playSynthesizerBeep(440, 0.12, 'triangle');
+    setTimeout(() => playSynthesizerBeep(311.13, 0.12, 'triangle'), 110);
+    setTimeout(() => playSynthesizerBeep(220, 0.2, 'triangle'), 220);
+  }, [soundEnabled]);
+
+  const playGameOverBeep = useCallback(() => {
+    if (!soundEnabled) return;
+    playSynthesizerBeep(523.25, 0.12, 'square');
+    setTimeout(() => playSynthesizerBeep(659.25, 0.12, 'square'), 130);
+    setTimeout(() => playSynthesizerBeep(783.99, 0.12, 'square'), 260);
+    setTimeout(() => playSynthesizerBeep(1046.5, 0.3, 'square'), 390);
+  }, [soundEnabled]);
+
   const chamChamGame = useChamChamGame({
     landmarksRef,
     onTickBeep: playGameTickBeep,
@@ -224,6 +259,10 @@ export default function App() {
 
   const lastConnectedRoomRef = useRef(null);
   const connectToPeerRef = useRef(null);
+  // Bridges so the matchmaking config (defined before the game hook) can reach
+  // the Attack-Defend hook without a "use before define" problem.
+  const handleGameEventRef = useRef(null);
+  const stopAttackDefendRef = useRef(() => {});
   const matchmakingActionsRef = useRef({
     sendMatchLeave: () => {},
     clearMatchedSession: () => {},
@@ -312,6 +351,7 @@ export default function App() {
           clearPeerLandmarks();
           lastConnectedRoomRef.current = null;
           stopGameRef.current?.();
+          stopAttackDefendRef.current?.();
           matchmakingActionsRef.current.clearMatchedSession();
           matchmakingActionsRef.current.sendMatchLeave();
         } else if (isPlaying && matchMode === 'peer') {
@@ -338,6 +378,21 @@ export default function App() {
         setPeerIsTracking(false);
       }, PEER_LANDMARK_STALE_MS);
     },
+    onGameEvent: (message) => {
+      handleGameEventRef.current?.(message);
+    },
+  });
+
+  const attackDefend = useAttackDefendGame({
+    landmarksRef,
+    userId: matchmaking.userId,
+    isActive: cameraActive && isPlaying && Boolean(stranger?.isPeerMatch),
+    sendGameEvent: matchmaking.sendGameEvent,
+    onNod1: playNod1Beep,
+    onNod2: playNod2Beep,
+    onAttackScored: playAttackScoredBeep,
+    onRoleSwap: playRoleSwapBeep,
+    onGameOver: playGameOverBeep,
   });
 
   sendPeerLandmarksRef.current = matchmaking.sendPeerLandmarks;
@@ -346,6 +401,8 @@ export default function App() {
     clearMatchedSession: matchmaking.clearMatchedSession,
   };
   stopGameRef.current = chamChamGame.stopGame;
+  handleGameEventRef.current = attackDefend.handleGameEvent;
+  stopAttackDefendRef.current = attackDefend.stopGame;
 
   useEffect(() => {
     if (!matchmaking.matchedSession) return;
@@ -569,6 +626,7 @@ export default function App() {
 
   const quitToLanding = () => {
     chamChamGame.stopGame();
+    attackDefend.stopGame();
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
     }
@@ -847,6 +905,46 @@ export default function App() {
 
   const isLandingTestCam = cameraActive && !isPlaying;
 
+  // --- Attack-Defend derived view state ---
+  const isPeerGame = Boolean(stranger?.isPeerMatch);
+  const adActive = isPeerGame && attackDefend.phase !== 'idle';
+  const myRole = attackDefend.myRole; // 'attacker' | 'defender' | null
+  const opponentRole = myRole === 'attacker'
+    ? 'defender'
+    : myRole === 'defender'
+      ? 'attacker'
+      : null;
+  const opponentName = stranger?.nickname || stranger?.alias || 'Opponent';
+  const myScore = matchmaking.userId ? (attackDefend.scores[matchmaking.userId] ?? 0) : 0;
+  const opponentScore = stranger?.id ? (attackDefend.scores[stranger.id] ?? 0) : 0;
+  const iWon = attackDefend.winnerId && attackDefend.winnerId === matchmaking.userId;
+
+  // One-line instruction telling the player exactly what to do right now.
+  let adStatusText = '';
+  if (adActive) {
+    if (attackDefend.phase === 'attackerTurn') {
+      if (myRole === 'attacker') {
+        if (attackDefend.actionLocked) {
+          adStatusText = 'Attack sent! Waiting for defender...';
+        } else if (attackDefend.nodCount === 0) {
+          adStatusText = 'Nod down to charge (1 / 2)';
+        } else if (attackDefend.nodCount === 1) {
+          adStatusText = 'Nod down again to load (2 / 2)';
+        } else {
+          adStatusText = 'Now aim: look LEFT or RIGHT';
+        }
+      } else {
+        adStatusText = `${opponentName} is charging an attack...`;
+      }
+    } else if (attackDefend.phase === 'defenderTurn') {
+      if (myRole === 'defender') {
+        adStatusText = attackDefend.actionLocked ? 'Locked in! Resolving...' : 'DEFEND! Look LEFT or RIGHT';
+      } else {
+        adStatusText = `${opponentName} is choosing a direction...`;
+      }
+    }
+  }
+
   return (
     <div className="neo-app">
       {/* Toast alert system widget */}
@@ -878,7 +976,6 @@ export default function App() {
       )}
 
       {/* Top Brand Header Bar */}
-s
 
       {/* Main Container Area */}
       <div className="neo-main-content">
@@ -893,7 +990,7 @@ s
                     <h1 className="hero-title hero-title--compact">Test Cam</h1>
                     <p className="hero-subtitle hero-subtitle--compact">
                       Point your face at the camera for tracking. <br />
-                      Adjusting seat to center your face. 
+                      Check Left, Right, center and Nod threashhold here.
                     </p>
 
                     <div className="landing-camera-preview landing-camera-preview--compact" id="landing-camera-preview">
@@ -917,6 +1014,7 @@ s
                         gameActive={false}
                         gameCue={null}
                         countdown={null}
+                        debugHeadTilt
                       />
                     </div>
 
@@ -1011,7 +1109,7 @@ s
                 </div>
 
                 <div style={{ marginTop: "1rem", textAlign: "center" }}>
-                  <button
+                  {/* <button
                     type="button"
                     className="neo-btn neo-btn-sm"
                     style={{ marginRight: "1rem" }}
@@ -1020,7 +1118,7 @@ s
                   >
                     <Video size={16} />
                     Practice vs AI
-                  </button>
+                  </button> */}
 
                   <button
                     type="button"
@@ -1079,12 +1177,77 @@ s
                 </div>
               )}
 
+              {/* ATTACK-DEFEND: role announcement (shows for 3s at round start) */}
+              {adActive && attackDefend.phase === 'roleReveal' && (
+                <div className="role-reveal-overlay" id="role-reveal-overlay">
+                  <div className="role-reveal-grid">
+                    <div className={`role-reveal-card role-reveal-card--${myRole || 'attacker'}`}>
+                      <div className="role-reveal-who">You</div>
+                      <div className="role-reveal-role">{myRole || '...'}</div>
+                    </div>
+                    <div className="role-reveal-vs">VS</div>
+                    <div className={`role-reveal-card role-reveal-card--${opponentRole || 'defender'}`}>
+                      <div className="role-reveal-who">{opponentName}</div>
+                      <div className="role-reveal-role">{opponentRole || '...'}</div>
+                    </div>
+                  </div>
+                  <p className="role-reveal-hint">Get ready...</p>
+                </div>
+              )}
+
+              {/* ATTACK-DEFEND: round outcome effect */}
+              {adActive && attackDefend.phase === 'resolving' && attackDefend.lastResult && (
+                <div className={`ad-result-overlay ad-result-overlay--${attackDefend.lastResult.outcome}`}>
+                  {attackDefend.lastResult.outcome === 'attackerScored' ? (
+                    <>
+                      <div className="ad-result-title">ATTACK LANDED!</div>
+                      <div className="ad-result-sub">Attacker scores a point</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="ad-result-title">DODGED!</div>
+                      <div className="ad-result-sub">Defender escaped — roles swapped</div>
+                    </>
+                  )}
+                  <div className="ad-result-dirs">
+                    Attacker aimed <strong>{attackDefend.lastResult.attackerDirection}</strong>
+                    {' · '}
+                    Defender went <strong>{attackDefend.lastResult.defenderDirection}</strong>
+                  </div>
+                </div>
+              )}
+
+              {/* ATTACK-DEFEND: game over */}
+              {adActive && attackDefend.phase === 'gameOver' && (
+                <div className="role-reveal-overlay" id="ad-gameover-overlay">
+                  <div className={`ad-gameover-card ad-gameover-card--${iWon ? 'win' : 'lose'}`}>
+                    <div className="ad-gameover-title">{iWon ? 'YOU WIN!' : 'YOU LOSE'}</div>
+                    <div className="ad-gameover-score">{myScore} — {opponentScore}</div>
+                    <button
+                      type="button"
+                      className="neo-btn neo-btn-green"
+                      style={{ marginTop: '1.5rem' }}
+                      onClick={quitToLanding}
+                    >
+                      <Home size={16} />
+                      Back to Home
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* LEFT COLUMN: VISUAL PANELS */}
               <div className="visual-panels">
                 {/* Controls bar */}
                 <div className="visual-title-row">
                   <div className="visual-title-text">
-                    ---
+                    {adActive ? (
+                      <span className="visual-title-score">
+                        You {myScore} · {opponentName} {opponentScore} · First to {attackDefend.winScore}
+                      </span>
+                    ) : (
+                      '---'
+                    )}
                   </div>
                   
                   <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -1105,6 +1268,11 @@ s
                   <div className="video-frame">
                     <div className="video-label-tag">
                       You ({nickname})
+                      {adActive && myRole && (
+                        <span className={`video-role-tag video-role-tag--${myRole}`}>
+                          {myRole}
+                        </span>
+                      )}
                     </div>
 
                     <video
@@ -1126,6 +1294,13 @@ s
                       gameCue={chamChamGame.gameCue}
                       countdown={chamChamGame.countdown}
                     />
+
+                    {adActive && myRole === 'attacker' && attackDefend.phase === 'attackerTurn' && (
+                      <div className="ad-nod-indicator">
+                        <span className={`ad-nod-dot${attackDefend.nodCount >= 1 ? ' ad-nod-dot--on' : ''}`} />
+                        <span className={`ad-nod-dot${attackDefend.nodCount >= 2 ? ' ad-nod-dot--on' : ''}`} />
+                      </div>
+                    )}
                   </div>
                   
                   {!opponentLeft && (
@@ -1134,9 +1309,15 @@ s
                       {stranger?.isPeerMatch
                         ? `${stranger.nickname || stranger.alias} (remote)`
                         : 'Opponent'}
+                      {adActive && opponentRole && (
+                        <span className={`video-role-tag video-role-tag--${opponentRole}`}>
+                          {opponentRole}
+                        </span>
+                      )}
                     </div>
 
                     {stranger?.isPeerMatch ? (
+                      <>
                       <MediaPipeHolisticCanvas
                         isActive
                         label={stranger.nickname || stranger.alias || 'Opponent'}
@@ -1147,6 +1328,13 @@ s
                         countdown={null}
                         remoteView
                       />
+                      {adActive && opponentRole === 'attacker' && attackDefend.phase === 'attackerTurn' && (
+                        <div className="ad-nod-indicator">
+                          <span className={`ad-nod-dot${attackDefend.peerNodCount >= 1 ? ' ad-nod-dot--on' : ''}`} />
+                          <span className={`ad-nod-dot${attackDefend.peerNodCount >= 2 ? ' ad-nod-dot--on' : ''}`} />
+                        </div>
+                      )}
+                      </>
                     ) : (
                       <div
                         style={{
@@ -1188,14 +1376,22 @@ s
                     </span>
                   )}
 
-                  {chamChamGame.showScore && (
+                  {/* Attack-Defend live instruction (peer games) */}
+                  {adActive && adStatusText && (
+                    <span className="ad-status-text">{adStatusText}</span>
+                  )}
+
+                  {/* Survival mode score (solo / AI practice only) */}
+                  {!isPeerGame && chamChamGame.showScore && (
                     <div className={`game-score-display ${chamChamGame.gamePhase === 'gameOver' ? 'game-score-display--over' : ''}`}>
                       Score: {chamChamGame.score}
                       {chamChamGame.gamePhase === 'gameOver' ? ' · Game Over' : ''}
                     </div>
                   )}
 
-                  {!opponentLeft && (
+                  {/* Survival mode Start button (solo / AI practice only).
+                      Peer Attack-Defend auto-starts on connect, so no button. */}
+                  {!opponentLeft && !isPeerGame && (
                     <button
                       className={`neo-btn neo-btn-sm ${chamChamGame.canStart && cameraActive && chamChamGame.gamePhase !== 'playing' ? 'neo-btn-green' : ''}`}
                       style={{

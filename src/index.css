@@ -491,6 +491,13 @@ body {
   text-transform: uppercase;
 }
 
+.visual-title-score {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 /* Video Frame boxes */
 .video-frame-container {
   display: grid;
@@ -614,6 +621,53 @@ body {
     linear-gradient(to left, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.4), transparent 56px);
 }
 
+/* Nod / head-tilt-down — bottom border glow (test cam + attack wind-up) */
+.face-direction-gradient--nod {
+  top: auto;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: auto;
+  height: 72px;
+  background: linear-gradient(to top, rgba(255, 219, 21, 0.95), rgba(255, 219, 21, 0.45), transparent);
+  transition: opacity 0.15s ease;
+}
+
+.face-direction-gradient--nod.face-direction-gradient--nod-active {
+  background:
+    linear-gradient(to top, rgba(255, 219, 21, 1), rgba(255, 219, 21, 0.55), transparent 72px),
+    linear-gradient(to bottom, transparent, transparent),
+    linear-gradient(to right, rgba(255, 219, 21, 0.35), transparent 40px),
+    linear-gradient(to left, rgba(255, 219, 21, 0.35), transparent 40px);
+  height: auto;
+  top: 0;
+}
+
+.face-direction-status-badge--nod {
+  background-color: var(--color-yellow);
+  color: var(--color-dark);
+  bottom: 12px;
+  top: auto;
+  transform: translateX(-50%);
+}
+
+.head-tilt-debug-overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 36;
+  opacity: 0;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.35rem 0.6rem;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: var(--color-yellow);
+  border: var(--neo-border-thin);
+  text-transform: uppercase;
+}
+
 .face-direction-status-badge {
   position: absolute;
   bottom: 12px;
@@ -706,6 +760,17 @@ body {
   font-family: var(--font-display);
   text-align: center;
   pointer-events: none;
+}
+
+/* R3F Html warmup overlay — keep below full-screen attack-defend UX (z-index 100) */
+.face-tracking-warmup-html {
+  z-index: 40;
+  pointer-events: none;
+}
+
+.holistic-canvas-container--remote .face-tracking-warmup-html,
+.face-tracking-warmup-html--remote {
+  z-index: 2;
 }
 
 .model-load-overlay--error {
@@ -1405,4 +1470,246 @@ body {
 @keyframes bounceLine {
   from { height: 20%; }
   to { height: 100%; }
+}
+
+/* ==========================================================================
+   ATTACK-DEFEND GAME
+   ========================================================================== */
+
+/* Role badge shown next to the player name inside each video frame */
+.video-role-tag {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.4rem;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border: var(--neo-border-thin);
+}
+
+.video-role-tag--attacker {
+  background-color: var(--color-pink);
+  color: var(--color-white);
+}
+
+.video-role-tag--defender {
+  background-color: var(--color-cyan);
+  color: var(--color-dark);
+}
+
+/* Full-screen role announcement at the start of a round */
+.role-reveal-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  padding: 2rem;
+  background-color: rgba(0, 0, 0, 0.82);
+  animation: ad-fade-in 0.2s ease;
+}
+
+.role-reveal-grid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.role-reveal-card {
+  min-width: 220px;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  border: var(--neo-border);
+  box-shadow: var(--neo-shadow-lg);
+  background-color: var(--color-white);
+  animation: ad-pop-in 0.35s cubic-bezier(0.18, 0.89, 0.32, 1.28) both;
+}
+
+.role-reveal-card--attacker {
+  background-color: var(--color-pink);
+  color: var(--color-white);
+}
+
+.role-reveal-card--defender {
+  background-color: var(--color-cyan);
+  color: var(--color-dark);
+}
+
+.role-reveal-who {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+  opacity: 0.85;
+}
+
+.role-reveal-role {
+  font-family: var(--font-display);
+  font-size: 2.4rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -1px;
+}
+
+.role-reveal-vs {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--color-yellow);
+  text-shadow: 3px 3px 0 var(--color-dark);
+}
+
+.role-reveal-hint {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  color: var(--color-yellow);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  animation: ad-blink 1s steps(2, start) infinite;
+}
+
+/* Round outcome effect (success / dodge) */
+.ad-result-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  text-align: center;
+  animation: ad-fade-in 0.15s ease;
+}
+
+.ad-result-overlay--attackerScored {
+  background-color: rgba(60, 224, 132, 0.92);
+}
+
+.ad-result-overlay--defenderEvaded {
+  background-color: rgba(63, 205, 255, 0.92);
+}
+
+.ad-result-title {
+  font-family: var(--font-display);
+  font-size: 3rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -1px;
+  color: var(--color-dark);
+  text-shadow: 4px 4px 0 var(--color-white);
+  animation: ad-pop-in 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28) both;
+}
+
+.ad-result-sub {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-dark);
+}
+
+.ad-result-dirs {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--color-dark);
+  background-color: rgba(255, 255, 255, 0.7);
+  padding: 0.35rem 0.75rem;
+  border: var(--neo-border-thin);
+}
+
+/* Game over card */
+.ad-gameover-card {
+  padding: 2.5rem 2rem;
+  text-align: center;
+  border: var(--neo-border);
+  box-shadow: var(--neo-shadow-lg);
+  background-color: var(--color-white);
+  animation: ad-pop-in 0.35s cubic-bezier(0.18, 0.89, 0.32, 1.28) both;
+}
+
+.ad-gameover-card--win {
+  background-color: var(--color-green);
+  color: var(--color-dark);
+}
+
+.ad-gameover-card--lose {
+  background-color: var(--color-orange);
+  color: var(--color-white);
+}
+
+.ad-gameover-title {
+  font-family: var(--font-display);
+  font-size: 2.6rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -1px;
+}
+
+.ad-gameover-score {
+  font-family: var(--font-mono);
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-top: 0.5rem;
+}
+
+/* Nod progress dots (overlay on the attacker's video frame) */
+.ad-nod-indicator {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 35;
+  display: flex;
+  gap: 0.6rem;
+  pointer-events: none;
+}
+
+.ad-nod-dot {
+  width: 18px;
+  height: 18px;
+  border: var(--neo-border-thin);
+  background-color: rgba(255, 255, 255, 0.35);
+  box-shadow: var(--neo-shadow-sm);
+}
+
+.ad-nod-dot--on {
+  background-color: var(--color-yellow);
+  animation: ad-pop-in 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.28) both;
+}
+
+/* Live one-line instruction in the action row */
+.ad-status-text {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 0.4rem 0.75rem;
+  background-color: var(--color-dark);
+  color: var(--color-yellow);
+  border: var(--neo-border-thin);
+}
+
+@keyframes ad-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes ad-pop-in {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes ad-blink {
+  50% { opacity: 0.3; }
 }

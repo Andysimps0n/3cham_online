@@ -30,6 +30,71 @@ const onlineUsers = new Map<string, OnlineUser>();
 const pendingInvites = new Map<string, PendingInvite>();
 const outboundInvitesByUser = new Map<string, string>();
 
+// ---------------------------------------------------------------------------
+// Attack-Defend game state (server-authoritative)
+// ---------------------------------------------------------------------------
+// The server owns ONE game per room. Both clients only *report* what their
+// player did (nodded, looked left/right); the server is the single source of
+// truth for roles, scoring, and role swaps so the two screens can never
+// disagree. First player to WIN_SCORE points wins.
+
+const WIN_SCORE = 5;
+
+type GameDirection = "left" | "right";
+type GamePhase = "attackerTurn" | "defenderTurn" | "gameOver";
+
+type Game = {
+  roomId: string;
+  attackerId: string;
+  defenderId: string;
+  scores: Record<string, number>;
+  attackerDirection: GameDirection | null;
+  phase: GamePhase;
+};
+
+const games = new Map<string, Game>();
+
+/** Send the same game snapshot to both players. They derive their own role
+ * from attackerId/defenderId vs. their own userId. */
+function broadcastGame(game: Game, extra: Record<string, unknown>) {
+  const payload = {
+    attackerId: game.attackerId,
+    defenderId: game.defenderId,
+    scores: game.scores,
+    phase: game.phase,
+    ...extra,
+  };
+
+  const attacker = getOnlineUser(game.attackerId);
+  const defender = getOnlineUser(game.defenderId);
+  if (attacker) sendSocketMessage(attacker.socket, payload);
+  if (defender) sendSocketMessage(defender.socket, payload);
+}
+
+function startGameForRoom(roomId: string, userAId: string, userBId: string) {
+  const attackerFirst = Math.random() < 0.5;
+  const attackerId = attackerFirst ? userAId : userBId;
+  const defenderId = attackerFirst ? userBId : userAId;
+
+  const game: Game = {
+    roomId,
+    attackerId,
+    defenderId,
+    scores: { [userAId]: 0, [userBId]: 0 },
+    attackerDirection: null,
+    phase: "attackerTurn",
+  };
+
+  games.set(roomId, game);
+  broadcastGame(game, { type: "game:start", winScore: WIN_SCORE });
+}
+
+function getGameForUser(userId: string): Game | undefined {
+  const user = onlineUsers.get(userId);
+  if (!user?.roomId) return undefined;
+  return games.get(user.roomId);
+}
+
 function generateUserId(): string {
   return Math.floor(Math.random() * 100000).toString().padStart(5, '0');
 }
@@ -68,6 +133,11 @@ function normalizeUserId(raw: string): string {
 function clearUserMatchState(userId: string) {
   const user = onlineUsers.get(userId);
   if (!user) return;
+
+  // Tear down any in-progress game for this room so a stale game can't linger.
+  if (user.roomId) {
+    games.delete(user.roomId);
+  }
 
   user.roomId = undefined;
   user.peerId = undefined;
@@ -109,6 +179,9 @@ function createPeerMatch(fromUser: OnlineUser, toUser: OnlineUser, inviteId: str
       avatarColor: avatarColorFromId(fromUser.userId),
     },
   });
+
+  // Kick off the Attack-Defend game for this freshly-connected pair.
+  startGameForRoom(roomId, fromUser.userId, toUser.userId);
 }
 
 app.post("/api/users/register", (req: Request, res: Response) => {
@@ -366,6 +439,90 @@ async function startServer() {
           sendSocketMessage(peer.socket, {
             type: "landmarks:peer",
             landmarks,
+            fromId: sender.userId,
+          });
+          break;
+        }
+
+        case "game:attack": {
+          if (!registeredUserId) return;
+
+          const game = getGameForUser(registeredUserId);
+          // Only the current attacker, only during the attacker's turn.
+          if (!game || game.phase !== "attackerTurn") return;
+          if (registeredUserId !== game.attackerId) return;
+
+          const direction = message.direction;
+          if (direction !== "left" && direction !== "right") return;
+
+          game.attackerDirection = direction;
+          game.phase = "defenderTurn";
+
+          // Note: we deliberately do NOT send attackerDirection to the defender
+          // here — that would let them cheat. They must pick blind.
+          broadcastGame(game, { type: "game:defenderTurn" });
+          break;
+        }
+
+        case "game:defend": {
+          if (!registeredUserId) return;
+
+          const game = getGameForUser(registeredUserId);
+          if (!game || game.phase !== "defenderTurn") return;
+          if (registeredUserId !== game.defenderId) return;
+
+          const defenderDirection = message.direction;
+          if (defenderDirection !== "left" && defenderDirection !== "right") return;
+
+          const attackerDirection = game.attackerDirection;
+          const scoringAttackerId = game.attackerId;
+          const attackerScored = attackerDirection === defenderDirection;
+
+          let outcome: "attackerScored" | "defenderEvaded";
+          if (attackerScored) {
+            game.scores[scoringAttackerId] = (game.scores[scoringAttackerId] ?? 0) + 1;
+            outcome = "attackerScored";
+          } else {
+            // Failed attack → swap roles.
+            outcome = "defenderEvaded";
+            const previousAttacker = game.attackerId;
+            game.attackerId = game.defenderId;
+            game.defenderId = previousAttacker;
+          }
+
+          const winnerId =
+            (game.scores[scoringAttackerId] ?? 0) >= WIN_SCORE ? scoringAttackerId : null;
+
+          game.phase = winnerId ? "gameOver" : "attackerTurn";
+          game.attackerDirection = null;
+
+          broadcastGame(game, {
+            type: "game:result",
+            outcome,
+            attackerDirection,
+            defenderDirection,
+            winnerId,
+          });
+
+          if (winnerId) {
+            games.delete(game.roomId);
+          }
+          break;
+        }
+
+        case "game:nod": {
+          // Pure relay so the defender can see the attacker "winding up".
+          if (!registeredUserId) return;
+
+          const sender = getOnlineUser(registeredUserId);
+          if (!sender?.peerId) return;
+
+          const peer = getOnlineUser(sender.peerId);
+          if (!peer) return;
+
+          sendSocketMessage(peer.socket, {
+            type: "game:nod",
+            count: message.count,
             fromId: sender.userId,
           });
           break;

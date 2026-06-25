@@ -15,7 +15,7 @@ function createFallbackUserId() {
   return Math.floor(Math.random() * 100000).toString().padStart(5, '0');
 }
 
-export function useMatchmaking({ nickname, onMatchConnected, onMatchIncoming, onMatchSent, onMatchError, onMatchDeclined, onPeerLandmarks }) {
+export function useMatchmaking({ nickname, onMatchConnected, onMatchIncoming, onMatchSent, onMatchError, onMatchDeclined, onPeerLandmarks, onGameEvent }) {
   const [userId, setUserId] = useState(() => localStorage.getItem(USER_ID_STORAGE_KEY) || null);
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [pendingInvite, setPendingInvite] = useState(null);
@@ -32,6 +32,7 @@ export function useMatchmaking({ nickname, onMatchConnected, onMatchIncoming, on
     onMatchError,
     onMatchDeclined,
     onPeerLandmarks,
+    onGameEvent,
   });
 
   useEffect(() => {
@@ -42,8 +43,9 @@ export function useMatchmaking({ nickname, onMatchConnected, onMatchIncoming, on
       onMatchError,
       onMatchDeclined,
       onPeerLandmarks,
+      onGameEvent,
     };
-  }, [onMatchConnected, onMatchIncoming, onMatchSent, onMatchError, onMatchDeclined, onPeerLandmarks]);
+  }, [onMatchConnected, onMatchIncoming, onMatchSent, onMatchError, onMatchDeclined, onPeerLandmarks, onGameEvent]);
 
   const registerUser = useCallback(async (nextNickname) => {
     const storedId = localStorage.getItem(USER_ID_STORAGE_KEY);
@@ -146,6 +148,12 @@ export function useMatchmaking({ nickname, onMatchConnected, onMatchIncoming, on
           break;
         case 'landmarks:peer':
           callbacksRef.current.onPeerLandmarks?.(message);
+          break;
+        case 'game:start':
+        case 'game:defenderTurn':
+        case 'game:result':
+        case 'game:nod':
+          callbacksRef.current.onGameEvent?.(message);
           break;
         default:
           break;
@@ -281,6 +289,17 @@ export function useMatchmaking({ nickname, onMatchConnected, onMatchIncoming, on
     return true;
   }, []);
 
+  const sendGameEvent = useCallback((payload) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    if (!payload || typeof payload.type !== 'string') {
+      return false;
+    }
+    wsRef.current.send(JSON.stringify(payload));
+    return true;
+  }, []);
+
   const sendMatchLeave = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'match:leave' }));
@@ -312,6 +331,7 @@ export function useMatchmaking({ nickname, onMatchConnected, onMatchIncoming, on
     declineInvite,
     cancelWaiting,
     sendPeerLandmarks,
+    sendGameEvent,
     clearMatchedSession: () => setMatchedSession(null),
     sendMatchLeave,
     copyUserId,
