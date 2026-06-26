@@ -30,6 +30,7 @@ import MediaPipeHandCanvas from './components/MediaPipeHandCanvas';
 import { useHolisticFaceLandmarks } from './hooks/useHolisticFaceLandmarks';
 import { useChamChamGame } from './hooks/useChamChamGame';
 import { useAttackDefendGame } from './hooks/useAttackDefendGame';
+import { usePracticeGame } from './hooks/usePracticeGame';
 import { useMatchmaking } from './hooks/useMatchmaking';
 import {
   deserializeFaceLandmarks,
@@ -98,6 +99,8 @@ function loadHistorySessions() {
 export default function App() {
   // Navigation & Screen Control
   const [isPlaying, setIsPlaying] = useState(false); // false = landing page, true = matching/chat workspace
+  const [practiceScreen, setPracticeScreen] = useState(null); // null | 'menu' | 'attacker' | 'defender'
+  const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [isMatching, setIsMatching] = useState(false); // loading screen spinner
   const [matchingStatus, setMatchingStatus] = useState("Looking for someone cool...");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -250,6 +253,17 @@ export default function App() {
     setTimeout(() => playSynthesizerBeep(1046.5, 0.3, 'square'), 390);
   }, [soundEnabled]);
 
+  // --- Practice mode sound effects ---
+  // The pseudo attacker telegraphs with two low "cham" beeps, then a sharper
+  // "CHAM!" attack beep — mirroring the real game's rhythm but with no opponent.
+  const playPracticePrepBeep = useCallback(() => {
+    playSynthesizerBeep(300, 0.12, 'sine');
+  }, [soundEnabled]);
+
+  const playPracticeAttackBeep = useCallback(() => {
+    playSynthesizerBeep(660, 0.16, 'square');
+  }, [soundEnabled]);
+
   const chamChamGame = useChamChamGame({
     landmarksRef,
     onTickBeep: playGameTickBeep,
@@ -393,6 +407,20 @@ export default function App() {
     onAttackScored: playAttackScoredBeep,
     onRoleSwap: playRoleSwapBeep,
     onGameOver: playGameOverBeep,
+  });
+
+  const practiceActive = practiceScreen === 'attacker' || practiceScreen === 'defender';
+  const practice = usePracticeGame({
+    landmarksRef,
+    mode: practiceActive ? practiceScreen : null,
+    isActive: cameraActive && practiceActive,
+    onNod1: playNod1Beep,
+    onNod2: playNod2Beep,
+    onAttackThrown: playAttackScoredBeep,
+    onPrepBeep: playPracticePrepBeep,
+    onAttackBeep: playPracticeAttackBeep,
+    onSurvived: playGameSuccessBeep,
+    onHit: playGameFailBeep,
   });
 
   sendPeerLandmarksRef.current = matchmaking.sendPeerLandmarks;
@@ -631,6 +659,7 @@ export default function App() {
       streamRef.current.getTracks().forEach(track => track.stop());
     }
     setCameraActive(false);
+    setShowHowToPlay(false);
     setIsMatching(false);
     setIsPlaying(false);
     setMatchMode(null);
@@ -899,8 +928,59 @@ export default function App() {
     triggerToast("Challenge declined.");
   };
 
-  const toggleLandingCamera = async () => {
-    await toggleCamera();
+  const turnOffLandingCamera = () => {
+    if (!cameraActive) return;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+    }
+    streamRef.current = null;
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
+    }
+    setCameraActive(false);
+  };
+
+  const backToLandingHome = () => {
+    setShowHowToPlay(false);
+    turnOffLandingCamera();
+  };
+
+  const openHowToPlay = () => {
+    turnOffLandingCamera();
+    setShowHowToPlay(true);
+  };
+
+  const openTestCam = async () => {
+    setShowHowToPlay(false);
+    if (!cameraActive) {
+      await toggleCamera();
+    }
+  };
+
+  // --- Practice navigation ---
+  const openPracticeMenu = () => {
+    turnOffLandingCamera();
+    setShowHowToPlay(false);
+    setPracticeScreen('menu');
+    playSynthesizerBeep(660, 0.1, 'sine');
+  };
+
+  const enterPracticeRole = async (role) => {
+    setPracticeScreen(role);
+    if (!cameraActive) {
+      await toggleCamera();
+    }
+  };
+
+  const exitPracticeToMenu = () => {
+    practice.stopDefense();
+    setPracticeScreen('menu');
+  };
+
+  const exitPractice = () => {
+    practice.stopDefense();
+    turnOffLandingCamera();
+    setPracticeScreen(null);
   };
 
   const isLandingTestCam = cameraActive && !isPlaying;
@@ -981,10 +1061,212 @@ export default function App() {
       <div className="neo-main-content">
         {/* Dynamic Inner Viewport Area */}
         <div className="neo-view-viewport">
-          {!isPlaying ? (
+          {practiceScreen ? (
+            practiceScreen === 'menu' ? (
+              /* ================= PRACTICE: ROLE MENU ================= */
+              <div className="practice-screen" id="practice-menu">
+                <div className="hero-card practice-card">
+                  <h1 className="hero-title hero-title--compact">Practice</h1>
+                  <p className="hero-subtitle hero-subtitle--compact">
+                    Train solo. Pick a role to practice its signature move.
+                  </p>
+
+                  <div className="practice-role-buttons">
+                    <button
+                      type="button"
+                      className="neo-btn neo-btn-blue practice-role-btn"
+                      onClick={() => enterPracticeRole('defender')}
+                      id="btn-practice-defender"
+                    >
+                      <ShieldAlert size={22} />
+                      Defender
+                    </button>
+
+                    <button
+                      type="button"
+                      className="neo-btn neo-btn-red practice-role-btn"
+                      onClick={() => enterPracticeRole('attacker')}
+                      id="btn-practice-attacker"
+                    >
+                      <Sparkles size={22} />
+                      Attacker
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="neo-btn neo-btn-sm landing-back-btn"
+                    onClick={exitPractice}
+                    id="btn-practice-menu-back"
+                    title="Return to home"
+                  >
+                    <Home size={16} />
+                    Back to Home
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* ================= PRACTICE: PLAY (attacker / defender) ================= */
+              <div className="practice-screen practice-screen--play" id={`practice-${practiceScreen}`}>
+                <div className="practice-play-header">
+                  <h2 className="practice-play-title">
+                    {practiceScreen === 'attacker' ? 'Attacker Practice' : 'Defender Practice'}
+                  </h2>
+                  <p className="practice-play-hint">
+                    {practiceScreen === 'attacker'
+                      ? 'Nod down twice to load, then aim LEFT or RIGHT. Repeat as much as you like.'
+                      : 'Press Start. Each attack, turn your head a DIFFERENT direction than the cue to survive.'}
+                  </p>
+                </div>
+
+                <div className="practice-stage">
+                  <div className="video-frame practice-video-frame">
+                    <div className="video-label-tag">
+                      You ({nickname})
+                      <span className={`video-role-tag video-role-tag--${practiceScreen}`}>
+                        {practiceScreen}
+                      </span>
+                    </div>
+
+                    <video
+                      ref={localVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      style={{ display: 'none' }}
+                    />
+
+                    <MediaPipeHolisticCanvas
+                      videoRef={localVideoRef}
+                      isActive={cameraActive}
+                      label={nickname}
+                      filterName={selectedFilter}
+                      landmarksRef={landmarksRef}
+                      isTracking={isTracking}
+                      gameActive={practiceScreen === 'defender' && practice.isDefenderRunning}
+                      gameCue={practiceScreen === 'defender' ? practice.currentCue : null}
+                      countdown={null}
+                    />
+
+                    {practiceScreen === 'attacker' && (
+                      <div className="ad-nod-indicator">
+                        <span className={`ad-nod-dot${practice.nodCount >= 1 ? ' ad-nod-dot--on' : ''}`} />
+                        <span className={`ad-nod-dot${practice.nodCount >= 2 ? ' ad-nod-dot--on' : ''}`} />
+                      </div>
+                    )}
+
+                    {practiceScreen === 'attacker' && practice.lastThrow && (
+                      <div className="ad-result-overlay ad-result-overlay--attackerScored practice-flash">
+                        <div className="ad-result-title">{practice.lastThrow.toUpperCase()}!</div>
+                        <div className="ad-result-sub">Attack thrown</div>
+                      </div>
+                    )}
+
+                    {practiceScreen === 'defender' && practice.lastOutcome && (
+                      <div
+                        className={`ad-result-overlay ${
+                          practice.lastOutcome.type === 'survived'
+                            ? 'ad-result-overlay--defenderEvaded'
+                            : 'ad-result-overlay--attackerScored'
+                        } practice-flash`}
+                      >
+                        {practice.lastOutcome.type === 'survived' ? (
+                          <>
+                            <div className="ad-result-title">DODGED!</div>
+                            <div className="ad-result-sub">+1 — nice reflexes</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="ad-result-title">HIT!</div>
+                            <div className="ad-result-sub">You&apos;d lose here — but it&apos;s practice, so you live</div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="practice-actions">
+                  {!cameraActive && (
+                    <button
+                      type="button"
+                      className="neo-btn neo-btn-sm neo-btn-green"
+                      onClick={toggleCamera}
+                      title="Turn your webcam on for tracking"
+                    >
+                      <Camera size={14} />
+                      <span>Turn Cam On</span>
+                    </button>
+                  )}
+
+                  {practiceScreen === 'attacker' && (
+                    <div className="game-score-display">Attacks thrown: {practice.attacksThrown}</div>
+                  )}
+
+                  {practiceScreen === 'defender' && (
+                    <>
+                      <div className="game-score-display">Score: {practice.defenderScore}</div>
+                      {!practice.isDefenderRunning ? (
+                        <button
+                          type="button"
+                          className={`neo-btn neo-btn-sm ${cameraActive && isTracking ? 'neo-btn-green' : ''}`}
+                          style={{
+                            opacity: cameraActive && isTracking ? 1 : 0.45,
+                            cursor: cameraActive && isTracking ? 'pointer' : 'not-allowed',
+                          }}
+                          onClick={practice.startDefense}
+                          disabled={!cameraActive || !isTracking}
+                          title={
+                            !cameraActive
+                              ? 'Turn the camera on first'
+                              : !isTracking
+                                ? 'Warming up face tracking...'
+                                : 'Start the pseudo attacker'
+                          }
+                        >
+                          <Play size={14} />
+                          <span>Start</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="neo-btn neo-btn-sm neo-btn-orange"
+                          onClick={practice.stopDefense}
+                          title="Stop the pseudo attacker"
+                        >
+                          <X size={14} />
+                          <span>Stop</span>
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  <button
+                    type="button"
+                    className="neo-btn neo-btn-sm"
+                    onClick={exitPracticeToMenu}
+                    title="Back to role selection"
+                  >
+                    <ChevronLeft size={14} />
+                    <span>Roles</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="neo-btn neo-btn-sm"
+                    onClick={exitPractice}
+                    title="Return to home"
+                  >
+                    <Home size={14} />
+                    <span>Home</span>
+                  </button>
+                </div>
+              </div>
+            )
+          ) : !isPlaying ? (
             /* ================= LANDING SCREEN ================= */
-            <div className={`landing-page${isLandingTestCam ? ' landing-page--test-cam' : ''}`} id="landing-screen">
-              <div className={`hero-card${isLandingTestCam ? ' hero-card--test-cam' : ''}`}>
+            <div className={`landing-page${isLandingTestCam ? ' landing-page--test-cam' : ''}${showHowToPlay ? ' landing-page--how-to-play' : ''}`} id="landing-screen">
+              <div className={`hero-card${isLandingTestCam ? ' hero-card--test-cam' : ''}${showHowToPlay ? ' hero-card--how-to-play' : ''}`}>
                 {isLandingTestCam ? (
                   <>
                     <h1 className="hero-title hero-title--compact">Test Cam</h1>
@@ -1020,11 +1302,73 @@ export default function App() {
 
                     <button
                       type="button"
-                      className="neo-btn neo-btn-sm"
-                      style={{ marginTop: "1.25rem" }}
-                      onClick={toggleLandingCamera}
+                      className="neo-btn neo-btn-sm landing-back-btn"
+                      onClick={backToLandingHome}
                       id="btn-back-to-home"
-                      title="Turn off camera and return to home"
+                      title="Return to home"
+                    >
+                      <Home size={16} />
+                      Back to Home
+                    </button>
+                  </>
+                ) : showHowToPlay ? (
+                  <>
+                    <h1 className="hero-title hero-title--compact">How to Play</h1>
+                    <p className="hero-subtitle hero-subtitle--compact">
+                      Face-tracking attack &amp; defend — first to 5 points wins.
+                    </p>
+
+                    <div className="how-to-play-content">
+                      <section className="how-to-play-section">
+                        <h2 className="how-to-play-section-title">1. Challenge a Friend</h2>
+                        <p>
+                          Copy your Player ID and send it to a friend. Enter their ID in the
+                          friend field, then press <strong>Challenge Friend</strong> to connect.
+                        </p>
+                      </section>
+
+                      <section className="how-to-play-section">
+                        <h2 className="how-to-play-section-title">2. Roles</h2>
+                        <p>
+                          Each round one player is the <strong>Attacker</strong> and the other is
+                          the <strong>Defender</strong>. Roles swap when the defender successfully
+                          dodges.
+                        </p>
+                      </section>
+
+                      <section className="how-to-play-section how-to-play-section--attacker">
+                        <h2 className="how-to-play-section-title">Attacker</h2>
+                        <ol className="how-to-play-steps">
+                          <li>Nod your head <strong>down twice</strong> to charge the attack.</li>
+                          <li>Look <strong>LEFT</strong> or <strong>RIGHT</strong> to pick your aim.</li>
+                          <li>If your direction matches the defender&apos;s, you score a point.</li>
+                        </ol>
+                      </section>
+
+                      <section className="how-to-play-section how-to-play-section--defender">
+                        <h2 className="how-to-play-section-title">Defender</h2>
+                        <ol className="how-to-play-steps">
+                          <li>While the attacker charges, watch their nod indicators.</li>
+                          <li>When it is your turn, look <strong>LEFT</strong> or <strong>RIGHT</strong> to dodge.</li>
+                          <li>Pick a <strong>different</strong> direction than the attacker to evade and swap roles.</li>
+                        </ol>
+                      </section>
+
+                      <section className="how-to-play-section">
+                        <h2 className="how-to-play-section-title">3. Test Cam First</h2>
+                        <p>
+                          Use <strong>Test Cam</strong> on the home screen to calibrate left, right,
+                          center, and nod detection before you play.
+                        </p>
+                      </section>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="neo-btn neo-btn-sm landing-back-btn"
+                      onClick={backToLandingHome}
+                      id="btn-how-to-play-back"
+                      title="Return to home"
                     >
                       <Home size={16} />
                       Back to Home
@@ -1041,7 +1385,7 @@ export default function App() {
                 </p>
 
                 {/* Set user credential box */}
-                <div className="setup-box" style={{ maxWidth: "500px", margin: "0 auto 2.5rem auto", width: "100%" }}>
+                <div className="setup-box" style={{ maxWidth: "500px", margin: "0 auto 1.5rem auto", width: "100%" }}>
                   <div style={{ marginBottom: "1rem" }}>
                     <label className="form-label" htmlFor="user-moniker">Nickname</label>
                     <input 
@@ -1093,11 +1437,9 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Action grid block buttons */}
-                <div className="landing-actions" style={{ display: "flex", gap: "1rem", flexWrap: "wrap", justifyContent: "center", alignItems: "center", width: "100%" }}>
+                <div className="landing-actions">
                   <button 
-                    className="neo-btn neo-btn-pink"
-                    style={{ fontSize: "1.4rem", padding: "1rem 2.5rem" }}
+                    className="neo-btn neo-btn-pink landing-actions__primary"
                     onClick={startPeerMatching}
                     id="btn-start-match"
                   >
@@ -1105,35 +1447,40 @@ export default function App() {
                     Challenge Friend
                   </button>
 
+                  <div className="landing-actions__secondary">
+                    <button
+                      type="button"
+                      className="neo-btn neo-btn-sm neo-btn-cyan landing-actions__secondary-btn"
+                      onClick={openTestCam}
+                      id="btn-test-camera"
+                      title="Test your webcam without starting a match"
+                    >
+                      <Camera size={16} />
+                      Test Cam
+                    </button>
 
-                </div>
+                    <button
+                      type="button"
+                      className="neo-btn neo-btn-sm neo-btn-yellow landing-actions__secondary-btn"
+                      onClick={openHowToPlay}
+                      id="btn-how-to-play"
+                      title="Learn how to play Cham Cham Cham"
+                    >
+                      <Info size={16} />
+                      How to Play
+                    </button>
 
-                <div style={{ marginTop: "1rem", textAlign: "center" }}>
-                  {/* <button
-                    type="button"
-                    className="neo-btn neo-btn-sm"
-                    style={{ marginRight: "1rem" }}
-                    onClick={startRandomMatching}
-                    id="btn-random-ai-match"
-                  >
-                    <Video size={16} />
-                    Practice vs AI
-                  </button> */}
-
-                  <button
-                    type="button"
-                    className="neo-btn neo-btn-sm"
-                    onClick={toggleLandingCamera}
-                    id="btn-test-camera"
-                    title="Test your webcam without starting a match"
-                  >
-                    <Camera size={16} />
-                    Test Cam
-                  </button>
-
-
-
-                  {/* here */}
+                    <button
+                      type="button"
+                      className="neo-btn neo-btn-sm neo-btn-green landing-actions__secondary-btn"
+                      onClick={openPracticeMenu}
+                      id="btn-practice"
+                      title="Practice attacking and defending solo"
+                    >
+                      <Play size={16} />
+                      Practice
+                    </button>
+                  </div>
                 </div>
                   </>
                 )}

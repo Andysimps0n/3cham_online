@@ -10,6 +10,8 @@
   --color-green: #3CE084;
   --color-orange: #FF8A3D;
   --color-purple: #B266FF;
+  --color-blue: #2D6BFF;
+  --color-red: #FF3B3B;
   --color-gray: #EBEBEB;
   --font-display: 'Space Grotesk', sans-serif;
   --font-sans: 'Inter', sans-serif;
@@ -33,7 +35,18 @@ body {
   background-size: 20px 20px;
   color: var(--color-dark);
   font-family: var(--font-sans);
-  overflow-x: hidden;
+  height: 100%;
+  overflow: hidden;
+}
+
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+  overflow: hidden;
 }
 
 /* Scrollbars */
@@ -55,8 +68,11 @@ body {
 
 /* App Wrapper Layout */
 .neo-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
-  height: 100vh;
 }
 
 /* Branded Header */
@@ -136,14 +152,20 @@ body {
 
 .neo-main-content {
   flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+  overflow: hidden;
 }
 
 .neo-view-viewport {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   position: relative;
-  height: 100%;
+  overflow: hidden;
 }
 
 /* Landing Page Hero Grid */
@@ -151,16 +173,19 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  padding: 2rem 1.5rem 3rem;
+  overflow: hidden;
+  padding: 1.5rem 1.5rem 1.5rem;
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
+}
+
+.landing-page .hero-card {
+  margin-bottom: 0;
 }
 
 .hero-card {
@@ -302,6 +327,117 @@ body {
   max-width: 600px;
 }
 
+.landing-page--how-to-play {
+  padding: 0.75rem 1.25rem 1rem;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.hero-card--how-to-play {
+  padding: 1.25rem 1.25rem 1rem;
+  max-width: 720px;
+  text-align: left;
+  margin-bottom: 0;
+}
+
+.hero-card--how-to-play .hero-title--compact {
+  font-size: 1.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.hero-card--how-to-play .hero-subtitle--compact {
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.hero-card--how-to-play .hero-title,
+.hero-card--how-to-play .hero-subtitle {
+  text-align: center;
+}
+
+.landing-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.landing-actions__primary {
+  width: 100%;
+  justify-content: center;
+  font-size: 1.35rem;
+  padding: 1rem 2rem;
+}
+
+.landing-actions__secondary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.landing-actions__secondary-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.landing-back-btn {
+  display: inline-flex;
+  margin: 0.65rem auto 0 auto;
+}
+
+.how-to-play-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+}
+
+.how-to-play-section:nth-child(1),
+.how-to-play-section:nth-child(2),
+.how-to-play-section:nth-child(5) {
+  grid-column: 1 / -1;
+}
+
+.how-to-play-section {
+  background-color: var(--color-gray);
+  border: var(--neo-border);
+  padding: 0.55rem 0.75rem;
+}
+
+.how-to-play-section--attacker {
+  border-left: 6px solid var(--color-pink);
+}
+
+.how-to-play-section--defender {
+  border-left: 6px solid var(--color-cyan);
+}
+
+.how-to-play-section-title {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  margin: 0 0 0.3rem 0;
+}
+
+.how-to-play-section p,
+.how-to-play-steps {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.how-to-play-steps {
+  padding-left: 1rem;
+}
+
+.how-to-play-steps li + li {
+  margin-top: 0.2rem;
+}
+
 /* Form Settings on Landing */
 .setup-box {
   background-color: var(--color-gray);
@@ -309,6 +445,14 @@ body {
   padding: 1.5rem;
   margin-bottom: 2.5rem;
   text-align: left;
+}
+
+.landing-page:not(.landing-page--how-to-play):not(.landing-page--test-cam) .hero-subtitle {
+  margin-bottom: 1.5rem;
+}
+
+.landing-page:not(.landing-page--how-to-play):not(.landing-page--test-cam) .setup-box {
+  margin-bottom: 1.5rem;
 }
 
 .setup-grid {
@@ -331,7 +475,21 @@ body {
   }
 
   .landing-page {
-    padding: 1.25rem 1rem 2.5rem;
+    padding: 1rem 1rem 1rem;
+  }
+
+  .landing-page--how-to-play {
+    padding: 0.5rem 0.75rem 0.75rem;
+  }
+
+  .how-to-play-content {
+    grid-template-columns: 1fr;
+  }
+
+  .how-to-play-section:nth-child(1),
+  .how-to-play-section:nth-child(2),
+  .how-to-play-section:nth-child(5) {
+    grid-column: auto;
   }
 
   .landing-page--test-cam {
@@ -339,8 +497,8 @@ body {
   }
 
   .hero-card {
-    padding: 1.5rem 1rem 2rem;
-    margin-bottom: 1rem;
+    padding: 1.5rem 1rem 1.5rem;
+    margin-bottom: 0;
   }
 
   .hero-card--test-cam {
@@ -353,14 +511,20 @@ body {
   }
 
   .landing-actions {
-    width: 100%;
+    max-width: 100%;
   }
 
-  .landing-actions .neo-btn-pink {
-    width: 100%;
-    justify-content: center;
-    font-size: 1.1rem !important;
-    padding: 0.85rem 1.25rem !important;
+  .landing-actions__primary {
+    font-size: 1.1rem;
+    padding: 0.85rem 1.25rem;
+  }
+
+  .landing-actions__secondary {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-card--how-to-play {
+    padding: 1.25rem 1rem;
   }
 
   .landing-camera-preview {
@@ -1144,6 +1308,8 @@ body {
 .neo-btn-green { background-color: var(--color-green); color: var(--color-dark); }
 .neo-btn-cyan { background-color: var(--color-cyan); color: var(--color-dark); }
 .neo-btn-orange { background-color: var(--color-orange); color: var(--color-white); }
+.neo-btn-blue { background-color: var(--color-blue); color: var(--color-white); }
+.neo-btn-red { background-color: var(--color-red); color: var(--color-white); }
 
 .neo-btn-sm {
   font-size: 0.85rem;
@@ -1237,19 +1403,23 @@ body {
 }
 
 .neo-sidebar {
+  flex: 0 0 320px;
   width: 320px;
   background-color: var(--color-white);
   border-left: var(--neo-border);
-  height: 100%;
   display: flex;
   flex-direction: column;
   position: relative;
   z-index: 40;
-  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  min-height: 0;
+  overflow: hidden;
+  transition: flex-basis 0.3s cubic-bezier(0.16, 1, 0.3, 1), width 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .neo-sidebar.collapsed {
-  width: 0px;
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
   border-left: none;
   overflow: hidden;
   transform: translateX(100%);
@@ -1712,4 +1882,89 @@ body {
 
 @keyframes ad-blink {
   50% { opacity: 0.3; }
+}
+
+/* ===================== PRACTICE MODE ===================== */
+.practice-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  width: 100%;
+  min-height: 100%;
+  padding: 2rem 1rem;
+  box-sizing: border-box;
+}
+
+.practice-card {
+  text-align: center;
+  max-width: 560px;
+  width: 100%;
+}
+
+/* The two big role buttons (defender = blue, attacker = red) */
+.practice-role-buttons {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 2rem 0;
+}
+
+.practice-role-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.25rem;
+  padding: 1.25rem 2.25rem;
+}
+
+.practice-screen--play {
+  justify-content: flex-start;
+  gap: 1rem;
+}
+
+.practice-play-header {
+  text-align: center;
+  max-width: 640px;
+}
+
+.practice-play-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.8rem;
+  text-transform: uppercase;
+  letter-spacing: -0.5px;
+}
+
+.practice-play-hint {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  opacity: 0.8;
+  margin-top: 0.35rem;
+}
+
+/* Single, centered player video for solo practice */
+.practice-stage {
+  width: 100%;
+  max-width: 560px;
+}
+
+.practice-video-frame {
+  aspect-ratio: 4 / 3;
+  width: 100%;
+}
+
+.practice-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Reuse the round-result overlay look, but fade it out on its own */
+.practice-flash {
+  animation: ad-fade-in 0.15s ease;
 }
