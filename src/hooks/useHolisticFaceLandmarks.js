@@ -4,36 +4,28 @@ import { Holistic } from '@mediapipe/holistic';
 /**
  * MediaPipe Holistic tracking only — no rendering.
  * Updates landmarksRef each frame; exposes fps for UI.
+ *
+ * Split into two effects:
+ * - Mount effect: create Holistic once, keep it warm across cam toggles
+ * - Active effect: start/stop the RAF loop when isActive changes
  */
 export function useHolisticFaceLandmarks(videoRef, isActive) {
   const landmarksRef = useRef(null);
   const leftHandLandmarksRef = useRef(null);
   const rightHandLandmarksRef = useRef(null);
   const holisticRef = useRef(null);
+  const runningRef = useRef(false);
   const [fps, setFps] = useState(0);
   const [isTracking, setIsTracking] = useState(false);
 
+  // Effect A: expensive setup once on mount, teardown only on unmount
   useEffect(() => {
-    if (!isActive) {
-      landmarksRef.current = null;
-      leftHandLandmarksRef.current = null;
-      rightHandLandmarksRef.current = null;
-      setFps(0);
-      setIsTracking(false);
-      return;
-    }
-
-    if (!videoRef) return;
-
-    let cancelled = false;
-    let rafId = 0;
     let frameCount = 0;
     let lastFpsTime = performance.now();
 
     const holistic = new Holistic({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`,
     });
-    holisticRef.current = holistic;
 
     holistic.setOptions({
       modelComplexity: 1,
@@ -45,7 +37,7 @@ export function useHolisticFaceLandmarks(videoRef, isActive) {
     });
 
     holistic.onResults((results) => {
-      if (cancelled) return;
+      if (!runningRef.current) return;
 
       landmarksRef.current = results.faceLandmarks ?? null;
       leftHandLandmarksRef.current = results.leftHandLandmarks ?? null;
@@ -66,8 +58,44 @@ export function useHolisticFaceLandmarks(videoRef, isActive) {
       ));
     });
 
+    holisticRef.current = holistic;
+
+    return () => {
+      runningRef.current = false;
+      holistic.close();
+      holisticRef.current = null;
+      landmarksRef.current = null;
+      leftHandLandmarksRef.current = null;
+      rightHandLandmarksRef.current = null;
+      setFps(0);
+      setIsTracking(false);
+    };
+  }, []);
+
+  // Effect B: cheap start/stop of the frame loop when cam toggles
+  useEffect(() => {
+    if (!isActive) {
+      runningRef.current = false;
+      landmarksRef.current = null;
+      leftHandLandmarksRef.current = null;
+      rightHandLandmarksRef.current = null;
+      setFps(0);
+      setIsTracking(false);
+      return;
+    }
+
+    if (!videoRef) return;
+
+    const holistic = holisticRef.current;
+    if (!holistic) return;
+
+    runningRef.current = true;
+
+    let cancelled = false;
+    let rafId = 0;
+
     const processFrame = async () => {
-      if (cancelled) return;
+      if (cancelled || !runningRef.current) return;
 
       const video = videoRef.current;
       if (!video || video.readyState < 2) {
@@ -85,6 +113,7 @@ export function useHolisticFaceLandmarks(videoRef, isActive) {
         console.warn('MediaPipe Holistic frame error:', err);
       }
 
+      if (cancelled || !runningRef.current) return;
       rafId = requestAnimationFrame(processFrame);
     };
 
@@ -92,9 +121,8 @@ export function useHolisticFaceLandmarks(videoRef, isActive) {
 
     return () => {
       cancelled = true;
+      runningRef.current = false;
       cancelAnimationFrame(rafId);
-      holistic.close();
-      holisticRef.current = null;
       landmarksRef.current = null;
       leftHandLandmarksRef.current = null;
       rightHandLandmarksRef.current = null;

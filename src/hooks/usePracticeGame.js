@@ -3,7 +3,9 @@ import {
   getFaceDirection,
   getHeadNodState,
   getHeadNodY,
+  isHeadNodding,
   isSurvivalResponse,
+  NOD_COOLDOWN_MS,
   pickRandomGameCue,
 } from '../tracking/faceDirection';
 
@@ -24,12 +26,10 @@ const DEFENDER_RESPONSE_WINDOW_MS = 1400; // time to dodge after the attack beep
 const DEFENDER_FLASH_MS = 900;         // how long the survived/hit flash shows
 const DEFENDER_ROUND_PAUSE_MS = 350;   // breather before the next attack
 
-// Attacker turn is a small state machine: down, up, down, up, then aim.
+// Attacker turn is a small state machine: down, un-nod, down, un-nod, then aim.
 const ATTACK_STAGE = {
   WAIT_DOWN_1: 'waitDown1',
-  WAIT_UP_1: 'waitUp1',
   WAIT_DOWN_2: 'waitDown2',
-  WAIT_UP_2: 'waitUp2',
   CHOOSE: 'choose',
 };
 
@@ -125,7 +125,14 @@ export function usePracticeGame({
     let baseline = null;
     const samples = [];
     let dirHold = { direction: null, since: 0 };
+    let lastNodRegisteredAt = 0;
+    let hasUnNodded = true;
     let flashClearId = null;
+
+    const canRegisterNod = () =>
+      hasUnNodded
+      && (lastNodRegisteredAt === 0
+        || performance.now() - lastNodRegisteredAt >= NOD_COOLDOWN_MS);
 
     const setNodCountIfChanged = (next) => {
       if (next !== nodCountLocal) {
@@ -165,29 +172,29 @@ export function usePracticeGame({
             }
           } else {
             const nodState = getHeadNodState(landmarks, baseline);
-            const isDown = nodState === 'down';
-            const isUp = nodState === 'up' || nodState === 'center';
+            const isDown = isHeadNodding(nodState);
+            if (!isDown) {
+              hasUnNodded = true;
+            }
 
             switch (stage) {
               case ATTACK_STAGE.WAIT_DOWN_1:
-                if (isDown) {
+                if (isDown && canRegisterNod()) {
                   setNodCountIfChanged(1);
                   callbacksRef.current.onNod1?.();
-                  stage = ATTACK_STAGE.WAIT_UP_1;
+                  hasUnNodded = false;
+                  lastNodRegisteredAt = performance.now();
+                  stage = ATTACK_STAGE.WAIT_DOWN_2;
                 }
-                break;
-              case ATTACK_STAGE.WAIT_UP_1:
-                if (isUp) stage = ATTACK_STAGE.WAIT_DOWN_2;
                 break;
               case ATTACK_STAGE.WAIT_DOWN_2:
-                if (isDown) {
+                if (isDown && canRegisterNod()) {
                   setNodCountIfChanged(2);
                   callbacksRef.current.onNod2?.();
-                  stage = ATTACK_STAGE.WAIT_UP_2;
+                  hasUnNodded = false;
+                  lastNodRegisteredAt = performance.now();
+                  stage = ATTACK_STAGE.CHOOSE;
                 }
-                break;
-              case ATTACK_STAGE.WAIT_UP_2:
-                if (isUp) stage = ATTACK_STAGE.CHOOSE;
                 break;
               case ATTACK_STAGE.CHOOSE: {
                 const chosen = detectHeldDirection(landmarks);
@@ -203,6 +210,8 @@ export function usePracticeGame({
 
                   stage = ATTACK_STAGE.WAIT_DOWN_1;
                   setNodCountIfChanged(0);
+                  lastNodRegisteredAt = 0;
+                  hasUnNodded = true;
                   dirHold = { direction: null, since: 0 };
                 }
                 break;

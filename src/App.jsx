@@ -1380,9 +1380,6 @@ export default function App() {
                   CHAM CHAM CHAM ONLINE
                 </h1>
                 
-                <p className="hero-subtitle">
-                  cham,,cham,,CHAM!
-                </p>
 
                 {/* Set user credential box */}
                 <div className="setup-box" style={{ maxWidth: "500px", margin: "0 auto 1.5rem auto", width: "100%" }}>
@@ -1448,7 +1445,7 @@ export default function App() {
                   </button>
 
                   <div className="landing-actions__secondary">
-                    <button
+                    {/* <button
                       type="button"
                       className="neo-btn neo-btn-sm neo-btn-cyan landing-actions__secondary-btn"
                       onClick={openTestCam}
@@ -1457,7 +1454,7 @@ export default function App() {
                     >
                       <Camera size={16} />
                       Test Cam
-                    </button>
+                    </button> */}
 
                     <button
                       type="button"

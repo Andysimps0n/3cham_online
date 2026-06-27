@@ -4,7 +4,9 @@ import {
   getHeadNodDelta,
   getHeadNodState,
   getHeadNodY,
+  isHeadNodding,
   logHeadTilt,
+  NOD_COOLDOWN_MS,
 } from '../tracking/faceDirection';
 
 // ---------------------------------------------------------------------------
@@ -26,9 +28,7 @@ const DIRECTION_HOLD_MS = 350;
 // Attacker action stages within a single turn.
 const STAGE = {
   WAIT_DOWN_1: 'waitDown1',
-  WAIT_UP_1: 'waitUp1',
   WAIT_DOWN_2: 'waitDown2',
-  WAIT_UP_2: 'waitUp2',
   CHOOSE: 'choose',
 };
 
@@ -70,6 +70,8 @@ export function useAttackDefendGame({
   const baselinePitchRef = useRef(null);
   const baselineSamplesRef = useRef([]);
   const dirHoldRef = useRef({ direction: null, since: 0 });
+  const lastNodRegisteredAtRef = useRef(0);
+  const hasUnNoddedRef = useRef(true);
   const committedRef = useRef(false);
   const timeoutsRef = useRef([]);
 
@@ -104,6 +106,8 @@ export function useAttackDefendGame({
     baselinePitchRef.current = null;
     baselineSamplesRef.current = [];
     dirHoldRef.current = { direction: null, since: 0 };
+    lastNodRegisteredAtRef.current = 0;
+    hasUnNoddedRef.current = true;
     committedRef.current = false;
   }, []);
 
@@ -261,34 +265,39 @@ export function useAttackDefendGame({
       const nodState = getHeadNodState(landmarks, baseline);
       if (nodState == null) return;
 
-      const isDown = nodState === 'down';
-      const isUp = nodState === 'up' || nodState === 'center';
+      const isDown = isHeadNodding(nodState);
+      if (!isDown) {
+        hasUnNoddedRef.current = true;
+      }
+
+      const canRegisterNod = () =>
+        hasUnNoddedRef.current
+        && (lastNodRegisteredAtRef.current === 0
+          || performance.now() - lastNodRegisteredAtRef.current >= NOD_COOLDOWN_MS);
 
       logHeadTilt(landmarks, {
         stage: nodStageRef.current,
         baseline,
         isDown,
-        isUp,
+        hasUnNodded: hasUnNoddedRef.current,
       });
 
       switch (nodStageRef.current) {
         case STAGE.WAIT_DOWN_1:
-          if (isDown) {
+          if (isDown && canRegisterNod()) {
             fireNod(1);
-            nodStageRef.current = STAGE.WAIT_UP_1;
+            hasUnNoddedRef.current = false;
+            lastNodRegisteredAtRef.current = performance.now();
+            nodStageRef.current = STAGE.WAIT_DOWN_2;
           }
-          break;
-        case STAGE.WAIT_UP_1:
-          if (isUp) nodStageRef.current = STAGE.WAIT_DOWN_2;
           break;
         case STAGE.WAIT_DOWN_2:
-          if (isDown) {
+          if (isDown && canRegisterNod()) {
             fireNod(2);
-            nodStageRef.current = STAGE.WAIT_UP_2;
+            hasUnNoddedRef.current = false;
+            lastNodRegisteredAtRef.current = performance.now();
+            nodStageRef.current = STAGE.CHOOSE;
           }
-          break;
-        case STAGE.WAIT_UP_2:
-          if (isUp) nodStageRef.current = STAGE.CHOOSE;
           break;
         case STAGE.CHOOSE: {
           const chosen = detectHeldDirection(landmarks);

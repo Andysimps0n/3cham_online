@@ -102,6 +102,20 @@ export const NOD_DROP_DEGREES = 4;
  */
 export const NOD_RISE_DEGREES = 2;
 
+/**
+ * Minimum gap between registering nod 1 and nod 2 (ms).
+ * Extra guard on top of the un-nod requirement below.
+ */
+export const NOD_COOLDOWN_MS = 700;
+
+/**
+ * True when pitch is below the nod threshold (actively nodding).
+ * The game requires a frame where this is false before the next nod counts.
+ */
+export function isHeadNodding(nodState) {
+  return nodState === 'down';
+}
+
 /** Absolute fallback when no baseline is calibrated yet */
 export const NOD_PITCH_DOWN_MAX = 74;
 export const NOD_PITCH_UP_MIN = 80;
