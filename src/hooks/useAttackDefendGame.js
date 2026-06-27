@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  canAcceptNodInput,
   getFaceDirection,
   getHeadNodDelta,
   getHeadNodState,
@@ -266,12 +267,13 @@ export function useAttackDefendGame({
       if (nodState == null) return;
 
       const isDown = isHeadNodding(nodState);
-      if (!isDown) {
+      if (!isDown && canAcceptNodInput(landmarks)) {
         hasUnNoddedRef.current = true;
       }
 
       const canRegisterNod = () =>
-        hasUnNoddedRef.current
+        canAcceptNodInput(landmarks)
+        && hasUnNoddedRef.current
         && (lastNodRegisteredAtRef.current === 0
           || performance.now() - lastNodRegisteredAtRef.current >= NOD_COOLDOWN_MS);
 

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  canAcceptNodInput,
   getFaceDirection,
   getHeadNodState,
   getHeadNodY,
   isHeadNodding,
-  isSurvivalResponse,
+  isHitResponse,
+  isPracticeDefenderSurvival,
   NOD_COOLDOWN_MS,
-  pickRandomGameCue,
+  createPracticeDefenderCuePicker,
 } from '../tracking/faceDirection';
 
 // ---------------------------------------------------------------------------
@@ -14,9 +16,6 @@ import {
 // ---------------------------------------------------------------------------
 // How many neutral-pitch samples we average before trusting the nod baseline.
 const BASELINE_SAMPLE_COUNT = 12;
-// A left/right aim must be held steadily this long before we "commit" it.
-// Same value the real game uses (useAttackDefendGame DIRECTION_HOLD_MS).
-const DIRECTION_HOLD_MS = 350;
 // How long the "ATTACK!" flash stays on the attacker screen before resetting.
 const ATTACK_FLASH_MS = 1000;
 
@@ -42,8 +41,8 @@ const ATTACK_STAGE = {
  *
  * - mode 'attacker': repeat the nod-nod-aim sequence as many times as you like.
  * - mode 'defender': a fake attacker beeps "cham cham CHAM" and cues a random
- *   direction; you survive (and score) by turning a DIFFERENT direction. In
- *   practice you always live, even when you "lose", and the role never changes.
+ *   direction; you survive (and score) by turning a DIFFERENT direction. On a
+ *   hit the loop stops and you press Start again to restart (score resets).
  */
 export function usePracticeGame({
   landmarksRef,
@@ -72,6 +71,7 @@ export function usePracticeGame({
   const timeoutsRef = useRef([]);
   const defenderRunIdRef = useRef(0);
   const defenderCancelledRef = useRef(false);
+  const defenderCuePickerRef = useRef(null);
   // Keep the latest audio callbacks in a ref so the long-lived defender loop
   // always calls the current functions without restarting on every render.
   const callbacksRef = useRef({});
@@ -102,6 +102,7 @@ export function usePracticeGame({
   const stopDefense = useCallback(() => {
     defenderCancelledRef.current = true;
     defenderRunIdRef.current += 1; // invalidate any in-flight loop
+    defenderCuePickerRef.current = null;
     clearTimeouts();
     setIsDefenderRunning(false);
     setCurrentCue(null);
@@ -124,13 +125,13 @@ export function usePracticeGame({
     let nodCountLocal = 0; // mirror of nodCount, avoids setState every frame
     let baseline = null;
     const samples = [];
-    let dirHold = { direction: null, since: 0 };
     let lastNodRegisteredAt = 0;
     let hasUnNodded = true;
     let flashClearId = null;
 
-    const canRegisterNod = () =>
-      hasUnNodded
+    const canRegisterNod = (landmarks) =>
+      canAcceptNodInput(landmarks)
+      && hasUnNodded
       && (lastNodRegisteredAt === 0
         || performance.now() - lastNodRegisteredAt >= NOD_COOLDOWN_MS);
 
@@ -141,21 +142,12 @@ export function usePracticeGame({
       }
     };
 
-    // Same hold logic as the real game: a direction must be held steadily
-    // before we trust it, so a flick through "left" on the way to "right"
-    // does not register.
-    const detectHeldDirection = (landmarks) => {
+    // Practice attacker: fire on the first left/right frame after the two nods.
+    // The real peer game still uses a 350 ms hold (useAttackDefendGame) to ignore
+    // accidental flicks; here we want instant feedback while drilling the motion.
+    const detectAimDirection = (landmarks) => {
       const dir = getFaceDirection(landmarks);
-      if (dir === 'left' || dir === 'right') {
-        if (dirHold.direction === dir) {
-          if (performance.now() - dirHold.since >= DIRECTION_HOLD_MS) return dir;
-        } else {
-          dirHold = { direction: dir, since: performance.now() };
-        }
-      } else {
-        dirHold = { direction: null, since: 0 };
-      }
-      return null;
+      return dir === 'left' || dir === 'right' ? dir : null;
     };
 
     const tick = () => {
@@ -173,13 +165,14 @@ export function usePracticeGame({
           } else {
             const nodState = getHeadNodState(landmarks, baseline);
             const isDown = isHeadNodding(nodState);
-            if (!isDown) {
+            // Only trust "un-nod" while centered — sideways pose flickers pitch readings.
+            if (!isDown && canAcceptNodInput(landmarks)) {
               hasUnNodded = true;
             }
 
             switch (stage) {
               case ATTACK_STAGE.WAIT_DOWN_1:
-                if (isDown && canRegisterNod()) {
+                if (isDown && canRegisterNod(landmarks)) {
                   setNodCountIfChanged(1);
                   callbacksRef.current.onNod1?.();
                   hasUnNodded = false;
@@ -188,7 +181,7 @@ export function usePracticeGame({
                 }
                 break;
               case ATTACK_STAGE.WAIT_DOWN_2:
-                if (isDown && canRegisterNod()) {
+                if (isDown && canRegisterNod(landmarks)) {
                   setNodCountIfChanged(2);
                   callbacksRef.current.onNod2?.();
                   hasUnNodded = false;
@@ -197,7 +190,7 @@ export function usePracticeGame({
                 }
                 break;
               case ATTACK_STAGE.CHOOSE: {
-                const chosen = detectHeldDirection(landmarks);
+                const chosen = detectAimDirection(landmarks);
                 if (chosen) {
                   // A full rep is done: flash it, count it, then reset so the
                   // player can immediately throw the next one.
@@ -212,7 +205,6 @@ export function usePracticeGame({
                   setNodCountIfChanged(0);
                   lastNodRegisteredAt = 0;
                   hasUnNodded = true;
-                  dirHold = { direction: null, since: 0 };
                 }
                 break;
               }
@@ -247,10 +239,14 @@ export function usePracticeGame({
             return;
           }
           const dir = getFaceDirection(landmarksRef.current);
-          // isSurvivalResponse encodes "a DIFFERENT direction survives".
-          if (isSurvivalResponse(cue, dir)) {
+          if (isPracticeDefenderSurvival(cue, dir)) {
             cancelAnimationFrame(rafId);
             resolve({ survived: true, dir });
+            return;
+          }
+          if (isHitResponse(cue, dir)) {
+            cancelAnimationFrame(rafId);
+            resolve({ survived: false, dir });
             return;
           }
           if (performance.now() - start >= timeoutMs) {
@@ -278,6 +274,7 @@ export function usePracticeGame({
     setDefenderScore(0);
     setLastOutcome(null);
     setCurrentCue(null);
+    defenderCuePickerRef.current = createPracticeDefenderCuePicker();
     setIsDefenderRunning(true);
 
     try {
@@ -290,8 +287,8 @@ export function usePracticeGame({
         await sleep(PREP_BEEP_GAP_MS);
         if (!active()) return;
 
-        // "CHAM!" — the attack: pick + reveal a random direction.
-        const cue = pickRandomGameCue();
+        // "CHAM!" — shuffled left/right bag (no back-to-back same side).
+        const cue = defenderCuePickerRef.current?.() ?? 'left';
         setCurrentCue(cue);
         callbacksRef.current.onAttackBeep?.();
 
@@ -308,17 +305,20 @@ export function usePracticeGame({
           setDefenderScore((s) => s + 1);
           setLastOutcome({ type: 'survived', cue, dir: result.dir });
           callbacksRef.current.onSurvived?.();
-        } else {
-          // Lose condition (same direction as the attacker). In practice you
-          // still LIVE — no point, no role change — so the loop just continues.
+
+          await sleep(DEFENDER_FLASH_MS);
+          if (!active()) return;
+          setLastOutcome(null);
+          await sleep(DEFENDER_ROUND_PAUSE_MS);
+        } else if (!result.cancelled) {
+          // Lose: same direction as the attacker (or no dodge in time).
           setLastOutcome({ type: 'hit', cue, dir: result.dir });
           callbacksRef.current.onHit?.();
-        }
 
-        await sleep(DEFENDER_FLASH_MS);
-        if (!active()) return;
-        setLastOutcome(null);
-        await sleep(DEFENDER_ROUND_PAUSE_MS);
+          await sleep(DEFENDER_FLASH_MS);
+          if (!active()) return;
+          break;
+        }
       }
     } finally {
       if (defenderRunIdRef.current === runId) setIsDefenderRunning(false);

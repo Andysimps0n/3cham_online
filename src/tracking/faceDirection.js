@@ -116,6 +116,20 @@ export function isHeadNodding(nodState) {
   return nodState === 'down';
 }
 
+/** True when the player is looking left or right (not at center). */
+export function isFaceSided(landmarks) {
+  const dir = getFaceDirection(landmarks);
+  return dir === 'left' || dir === 'right';
+}
+
+/**
+ * Attacker nods only count while facing center.
+ * Turning left/right changes pitch readings and can false-trigger or double-count nods.
+ */
+export function canAcceptNodInput(landmarks) {
+  return getFaceDirection(landmarks) === 'center';
+}
+
 /** Absolute fallback when no baseline is calibrated yet */
 export const NOD_PITCH_DOWN_MAX = 74;
 export const NOD_PITCH_UP_MIN = 80;
@@ -173,9 +187,57 @@ export function logHeadTilt(landmarks, extra = {}) {
 
 export const GAME_CUE_DIRECTIONS = ['left', 'center', 'right'];
 
+/** Side-only attacks for defender practice (yellow left/right borders). */
+export const PRACTICE_DEFENDER_CUES = ['left', 'right'];
+
+function randomInt(max) {
+  if (max <= 0) return 0;
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const buf = new Uint32Array(1);
+    crypto.getRandomValues(buf);
+    return buf[0] % max;
+  }
+  return Math.floor(Math.random() * max);
+}
+
+function shuffleInPlace(values) {
+  for (let i = values.length - 1; i > 0; i -= 1) {
+    const j = randomInt(i + 1);
+    [values[i], values[j]] = [values[j], values[i]];
+  }
+  return values;
+}
+
 export function pickRandomGameCue() {
-  const index = Math.floor(Math.random() * GAME_CUE_DIRECTIONS.length);
-  return GAME_CUE_DIRECTIONS[index];
+  return GAME_CUE_DIRECTIONS[randomInt(GAME_CUE_DIRECTIONS.length)];
+}
+
+/**
+ * Shuffled bag of left/right — each side appears once before the bag refills,
+ * so attacks alternate sides with no back-to-back repeats.
+ */
+export function createPracticeDefenderCuePicker() {
+  let bag = [];
+
+  return function pickPracticeDefenderCue() {
+    if (bag.length === 0) {
+      bag = shuffleInPlace([...PRACTICE_DEFENDER_CUES]);
+    }
+    return bag.pop();
+  };
+}
+
+/**
+ * Stricter dodge rules for solo defender practice: you must turn to the
+ * opposite side. Resting at center no longer auto-dodges a left/right attack.
+ */
+export function isPracticeDefenderSurvival(cue, currentDirection) {
+  if (!currentDirection) return false;
+
+  if (cue === 'left') return currentDirection === 'right';
+  if (cue === 'right') return currentDirection === 'left';
+
+  return false;
 }
 
 /** Opposite-direction rule: survive by tilting away from the cued side. */
@@ -185,6 +247,17 @@ export function isSurvivalResponse(cue, currentDirection) {
   if (cue === 'left') return currentDirection === 'right'|| currentDirection === 'center';
   if (cue === 'right') return currentDirection === 'left'|| currentDirection === 'center';
   if (cue === 'center') return currentDirection === 'left' || currentDirection === 'right';
+
+  return false;
+}
+
+/** Lose when your head matches the attack direction (mirror of isSurvivalResponse). */
+export function isHitResponse(cue, currentDirection) {
+  if (!currentDirection) return false;
+
+  if (cue === 'left') return currentDirection === 'left';
+  if (cue === 'right') return currentDirection === 'right';
+  if (cue === 'center') return currentDirection === 'center';
 
   return false;
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useHolisticFaceLandmarks } from '../hooks/useHolisticFaceLandmarks';
 import {
+  canAcceptNodInput,
   getFaceDirection,
   getHeadNodDelta,
   getHeadNodState,
@@ -13,22 +13,24 @@ export default function MediaPipeHolisticCanvas({
   videoRef,
   isActive,
   label = 'You',
-  landmarksRef: externalLandmarksRef,
+  landmarksRef,
   isTracking = false,
   gameActive = false,
   gameCue = null,
+  attackCue = null,
   countdown = null,
   remoteView = false,
   debugHeadTilt = false,
   nodBorderEnabled = true,
+  showDirectionLabels = true,
 }) {
-  const internalTracking = useHolisticFaceLandmarks(videoRef, isActive && !externalLandmarksRef);
-  const landmarksRef = externalLandmarksRef ?? internalTracking.landmarksRef;
-
   const [showLandmarks, setShowLandmarks] = useState(true);
   const leftGradientRef = useRef(null);
   const rightGradientRef = useRef(null);
   const centerGradientRef = useRef(null);
+  const attackLeftGradientRef = useRef(null);
+  const attackRightGradientRef = useRef(null);
+  const attackCenterGradientRef = useRef(null);
   const nodGradientRef = useRef(null);
   const readyBadgeRef = useRef(null);
   const leftBadgeRef = useRef(null);
@@ -46,6 +48,9 @@ export default function MediaPipeHolisticCanvas({
       if (leftGradientRef.current) leftGradientRef.current.style.opacity = '0';
       if (rightGradientRef.current) rightGradientRef.current.style.opacity = '0';
       if (centerGradientRef.current) centerGradientRef.current.style.opacity = '0';
+      if (attackLeftGradientRef.current) attackLeftGradientRef.current.style.opacity = '0';
+      if (attackRightGradientRef.current) attackRightGradientRef.current.style.opacity = '0';
+      if (attackCenterGradientRef.current) attackCenterGradientRef.current.style.opacity = '0';
       if (nodGradientRef.current) nodGradientRef.current.style.opacity = '0';
       if (readyBadgeRef.current) readyBadgeRef.current.style.opacity = '0';
       if (leftBadgeRef.current) leftBadgeRef.current.style.opacity = '0';
@@ -71,6 +76,9 @@ export default function MediaPipeHolisticCanvas({
       if (leftGradientRef.current) leftGradientRef.current.style.opacity = '0';
       if (rightGradientRef.current) rightGradientRef.current.style.opacity = '0';
       if (centerGradientRef.current) centerGradientRef.current.style.opacity = '0';
+      if (attackLeftGradientRef.current) attackLeftGradientRef.current.style.opacity = '0';
+      if (attackRightGradientRef.current) attackRightGradientRef.current.style.opacity = '0';
+      if (attackCenterGradientRef.current) attackCenterGradientRef.current.style.opacity = '0';
       if (nodGradientRef.current) nodGradientRef.current.style.opacity = '0';
       if (readyBadgeRef.current) readyBadgeRef.current.style.opacity = '0';
       if (leftBadgeRef.current) leftBadgeRef.current.style.opacity = '0';
@@ -79,7 +87,7 @@ export default function MediaPipeHolisticCanvas({
     };
 
     const updateNodVisuals = (landmarks) => {
-      if (!nodBorderEnabled || gameActive || remoteView) {
+      if (!nodBorderEnabled || gameActive || remoteView || !canAcceptNodInput(landmarks)) {
         if (nodGradientRef.current) nodGradientRef.current.style.opacity = '0';
         if (nodBadgeRef.current) nodBadgeRef.current.style.opacity = '0';
         return;
@@ -140,9 +148,34 @@ export default function MediaPipeHolisticCanvas({
       }
     };
 
+    const updateAttackCueOverlays = () => {
+      if (!attackCue) {
+        if (attackLeftGradientRef.current) attackLeftGradientRef.current.style.opacity = '0';
+        if (attackRightGradientRef.current) attackRightGradientRef.current.style.opacity = '0';
+        if (attackCenterGradientRef.current) attackCenterGradientRef.current.style.opacity = '0';
+        return;
+      }
+
+      if (attackCue === 'center') {
+        if (attackLeftGradientRef.current) attackLeftGradientRef.current.style.opacity = '0';
+        if (attackRightGradientRef.current) attackRightGradientRef.current.style.opacity = '0';
+        if (attackCenterGradientRef.current) attackCenterGradientRef.current.style.opacity = '1';
+      } else {
+        if (attackLeftGradientRef.current) {
+          attackLeftGradientRef.current.style.opacity = attackCue === 'left' ? '1' : '0';
+        }
+        if (attackRightGradientRef.current) {
+          attackRightGradientRef.current.style.opacity = attackCue === 'right' ? '1' : '0';
+        }
+        if (attackCenterGradientRef.current) attackCenterGradientRef.current.style.opacity = '0';
+      }
+    };
+
     const updateBorderGradients = () => {
       const landmarks = landmarksRef.current;
       const direction = getFaceDirection(landmarks);
+
+      updateAttackCueOverlays();
 
       if (gameActive && gameCue) {
         if (gameCue === 'center') {
@@ -191,14 +224,16 @@ export default function MediaPipeHolisticCanvas({
         if (centerGradientRef.current) {
           centerGradientRef.current.style.opacity = direction === 'center' ? '1' : '0';
         }
-        if (readyBadgeRef.current) {
-          readyBadgeRef.current.style.opacity = direction === 'center' ? '1' : '0';
-        }
-        if (leftBadgeRef.current) {
-          leftBadgeRef.current.style.opacity = direction === 'left' ? '1' : '0';
-        }
-        if (rightBadgeRef.current) {
-          rightBadgeRef.current.style.opacity = direction === 'right' ? '1' : '0';
+        if (showDirectionLabels) {
+          if (readyBadgeRef.current) {
+            readyBadgeRef.current.style.opacity = direction === 'center' ? '1' : '0';
+          }
+          if (leftBadgeRef.current) {
+            leftBadgeRef.current.style.opacity = direction === 'left' ? '1' : '0';
+          }
+          if (rightBadgeRef.current) {
+            rightBadgeRef.current.style.opacity = direction === 'right' ? '1' : '0';
+          }
         }
 
         if (landmarks) {
@@ -212,7 +247,7 @@ export default function MediaPipeHolisticCanvas({
     frameId = requestAnimationFrame(updateBorderGradients);
 
     return () => cancelAnimationFrame(frameId);
-  }, [isActive, landmarksRef, gameActive, gameCue, debugHeadTilt, nodBorderEnabled, remoteView]);
+  }, [isActive, landmarksRef, gameActive, gameCue, attackCue, debugHeadTilt, nodBorderEnabled, remoteView, showDirectionLabels]);
 
   return (
     <div
@@ -266,19 +301,26 @@ export default function MediaPipeHolisticCanvas({
 
       {isActive && (
         <>
+          <div ref={attackLeftGradientRef} className="face-direction-gradient face-direction-gradient--left face-direction-gradient--attack-cue" />
+          <div ref={attackRightGradientRef} className="face-direction-gradient face-direction-gradient--right face-direction-gradient--attack-cue" />
+          <div ref={attackCenterGradientRef} className="face-direction-gradient face-direction-gradient--center face-direction-gradient--attack-cue-center" />
           <div ref={leftGradientRef} className="face-direction-gradient face-direction-gradient--left" />
           <div ref={rightGradientRef} className="face-direction-gradient face-direction-gradient--right" />
           <div ref={centerGradientRef} className="face-direction-gradient face-direction-gradient--center" />
           <div ref={nodGradientRef} className="face-direction-gradient face-direction-gradient--nod" />
-          <div ref={readyBadgeRef} className="face-direction-status-badge face-direction-status-badge--ready">
-            Centered
-          </div>
-          <div ref={leftBadgeRef} className="face-direction-status-badge face-direction-status-badge--side">
-            Left
-          </div>
-          <div ref={rightBadgeRef} className="face-direction-status-badge face-direction-status-badge--side">
-            Right
-          </div>
+          {showDirectionLabels && (
+            <>
+              <div ref={readyBadgeRef} className="face-direction-status-badge face-direction-status-badge--ready">
+                Centered
+              </div>
+              <div ref={leftBadgeRef} className="face-direction-status-badge face-direction-status-badge--side">
+                Left
+              </div>
+              <div ref={rightBadgeRef} className="face-direction-status-badge face-direction-status-badge--side">
+                Right
+              </div>
+            </>
+          )}
           <div ref={nodBadgeRef} className="face-direction-status-badge face-direction-status-badge--nod">
             Nod
           </div>

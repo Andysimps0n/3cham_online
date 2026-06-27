@@ -1,42 +1,36 @@
 import { useEffect, useRef, useState } from 'react';
-import { Holistic } from '@mediapipe/holistic';
+import {
+  getSharedHolistic,
+  isHolisticFatalError,
+  subscribeHolisticResults,
+} from '../tracking/sharedHolistic';
 
 /**
  * MediaPipe Holistic tracking only — no rendering.
  * Updates landmarksRef each frame; exposes fps for UI.
  *
- * Split into two effects:
- * - Mount effect: create Holistic once, keep it warm across cam toggles
- * - Active effect: start/stop the RAF loop when isActive changes
+ * Uses a module-level shared Holistic instance (WASM must not be duplicated).
+ * Effect A: subscribe to results on mount
+ * Effect B: start/stop the RAF loop when isActive changes
  */
 export function useHolisticFaceLandmarks(videoRef, isActive) {
   const landmarksRef = useRef(null);
   const leftHandLandmarksRef = useRef(null);
   const rightHandLandmarksRef = useRef(null);
-  const holisticRef = useRef(null);
   const runningRef = useRef(false);
   const [fps, setFps] = useState(0);
   const [isTracking, setIsTracking] = useState(false);
+  const [holisticReady, setHolisticReady] = useState(false);
 
-  // Effect A: expensive setup once on mount, teardown only on unmount
+  // Effect A: wire up results handler once per hook consumer
   useEffect(() => {
     let frameCount = 0;
     let lastFpsTime = performance.now();
 
-    const holistic = new Holistic({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`,
-    });
+    getSharedHolistic();
+    setHolisticReady(true);
 
-    holistic.setOptions({
-      modelComplexity: 1,
-      smoothLandmarks: true,
-      enableSegmentation: false,
-      refineFaceLandmarks: true,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5,
-    });
-
-    holistic.onResults((results) => {
+    const unsubscribe = subscribeHolisticResults((results) => {
       if (!runningRef.current) return;
 
       landmarksRef.current = results.faceLandmarks ?? null;
@@ -58,12 +52,10 @@ export function useHolisticFaceLandmarks(videoRef, isActive) {
       ));
     });
 
-    holisticRef.current = holistic;
-
     return () => {
       runningRef.current = false;
-      holistic.close();
-      holisticRef.current = null;
+      unsubscribe();
+      setHolisticReady(false);
       landmarksRef.current = null;
       leftHandLandmarksRef.current = null;
       rightHandLandmarksRef.current = null;
@@ -72,7 +64,7 @@ export function useHolisticFaceLandmarks(videoRef, isActive) {
     };
   }, []);
 
-  // Effect B: cheap start/stop of the frame loop when cam toggles
+  // Effect B: start/stop the frame loop when cam toggles
   useEffect(() => {
     if (!isActive) {
       runningRef.current = false;
@@ -84,18 +76,18 @@ export function useHolisticFaceLandmarks(videoRef, isActive) {
       return;
     }
 
-    if (!videoRef) return;
+    if (!videoRef || !holisticReady) return;
 
-    const holistic = holisticRef.current;
-    if (!holistic) return;
-
+    const holistic = getSharedHolistic();
     runningRef.current = true;
 
     let cancelled = false;
     let rafId = 0;
+    let sendInFlight = false;
+    let fatalError = false;
 
     const processFrame = async () => {
-      if (cancelled || !runningRef.current) return;
+      if (cancelled || !runningRef.current || fatalError) return;
 
       const video = videoRef.current;
       if (!video || video.readyState < 2) {
@@ -107,13 +99,27 @@ export function useHolisticFaceLandmarks(videoRef, isActive) {
         return;
       }
 
+      // MediaPipe rejects overlapping send() on the same instance
+      if (sendInFlight) {
+        rafId = requestAnimationFrame(processFrame);
+        return;
+      }
+
+      sendInFlight = true;
       try {
         await holistic.send({ image: video });
       } catch (err) {
         console.warn('MediaPipe Holistic frame error:', err);
+        if (isHolisticFatalError(err)) {
+          fatalError = true;
+          runningRef.current = false;
+          return;
+        }
+      } finally {
+        sendInFlight = false;
       }
 
-      if (cancelled || !runningRef.current) return;
+      if (cancelled || !runningRef.current || fatalError) return;
       rafId = requestAnimationFrame(processFrame);
     };
 
@@ -129,7 +135,7 @@ export function useHolisticFaceLandmarks(videoRef, isActive) {
       setFps(0);
       setIsTracking(false);
     };
-  }, [isActive, videoRef]);
+  }, [isActive, videoRef, holisticReady]);
 
   return { landmarksRef, leftHandLandmarksRef, rightHandLandmarksRef, fps, isTracking };
 }

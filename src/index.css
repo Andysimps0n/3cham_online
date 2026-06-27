@@ -767,6 +767,27 @@ html {
   background: linear-gradient(to left, rgba(51, 102, 255, 0.95), rgba(51, 102, 255, 0.4), transparent);
 }
 
+/* Practice defender: pseudo-attacker direction (layered under your head-direction glow) */
+.face-direction-gradient--attack-cue {
+  z-index: 24;
+}
+
+.face-direction-gradient--left.face-direction-gradient--attack-cue {
+  background: linear-gradient(to right, rgba(255, 222, 77, 0.95), rgba(255, 222, 77, 0.45), transparent);
+}
+
+.face-direction-gradient--right.face-direction-gradient--attack-cue {
+  background: linear-gradient(to left, rgba(255, 222, 77, 0.95), rgba(255, 222, 77, 0.45), transparent);
+}
+
+.face-direction-gradient--center.face-direction-gradient--attack-cue-center {
+  background:
+    linear-gradient(to bottom, rgba(255, 222, 77, 0.95), rgba(255, 222, 77, 0.45), transparent 56px),
+    linear-gradient(to top, rgba(255, 222, 77, 0.95), rgba(255, 222, 77, 0.45), transparent 56px),
+    linear-gradient(to right, rgba(255, 222, 77, 0.95), rgba(255, 222, 77, 0.45), transparent 56px),
+    linear-gradient(to left, rgba(255, 222, 77, 0.95), rgba(255, 222, 77, 0.45), transparent 56px);
+}
+
 .face-direction-gradient--center {
   inset: 0;
   width: auto;

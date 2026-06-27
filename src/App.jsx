@@ -150,6 +150,25 @@ export default function App() {
     }
   }, []);
 
+  const attachCameraStreamToVideo = useCallback(() => {
+    const video = localVideoRef.current;
+    const stream = streamRef.current;
+    if (!video || !stream) return false;
+
+    if (video.srcObject !== stream) {
+      video.srcObject = stream;
+    }
+
+    void video.play().catch(() => {});
+    return true;
+  }, []);
+
+  const waitForNextPaint = useCallback(() => new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(resolve);
+    });
+  }), []);
+
   // Preset interests for neobrutalist vibe
   const presetInterests = [
     "neobrutalism", "css-art", "retro-gaming", "analog-synths", 
@@ -483,9 +502,7 @@ export default function App() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         streamRef.current = stream;
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
+        attachCameraStreamToVideo();
         setCameraActive(true);
         triggerToast("Vibrant webcam stream is live! Try the styling filters!");
         playSynthesizerBeep(650, 0.25, "triangle");
@@ -506,12 +523,12 @@ export default function App() {
     };
   }, []);
 
-  // Update stream when cameraActive is true on mount
+  // Re-attach stream when the visible <video> mounts (practice / match / test cam screens)
   useEffect(() => {
-    if (cameraActive && localVideoRef.current && streamRef.current) {
-      localVideoRef.current.srcObject = streamRef.current;
+    if (cameraActive) {
+      attachCameraStreamToVideo();
     }
-  }, [cameraActive]);
+  }, [cameraActive, practiceScreen, isPlaying, attachCameraStreamToVideo]);
 
   // Enter random AI matching mode
   const startRandomMatching = () => {
@@ -952,8 +969,11 @@ export default function App() {
 
   const openTestCam = async () => {
     setShowHowToPlay(false);
+    await waitForNextPaint();
     if (!cameraActive) {
       await toggleCamera();
+    } else {
+      attachCameraStreamToVideo();
     }
   };
 
@@ -967,8 +987,12 @@ export default function App() {
 
   const enterPracticeRole = async (role) => {
     setPracticeScreen(role);
+    // Wait for the practice <video> to mount before getUserMedia / stream attach
+    await waitForNextPaint();
     if (!cameraActive) {
       await toggleCamera();
+    } else {
+      attachCameraStreamToVideo();
     }
   };
 
@@ -1115,7 +1139,7 @@ export default function App() {
                   <p className="practice-play-hint">
                     {practiceScreen === 'attacker'
                       ? 'Nod down twice to load, then aim LEFT or RIGHT. Repeat as much as you like.'
-                      : 'Press Start. Each attack, turn your head a DIFFERENT direction than the cue to survive.'}
+                      : 'Press Start. Each attack, turn to the OPPOSITE side (left ↔ right) to survive.'}
                   </p>
                 </div>
 
@@ -1143,8 +1167,14 @@ export default function App() {
                       filterName={selectedFilter}
                       landmarksRef={landmarksRef}
                       isTracking={isTracking}
-                      gameActive={practiceScreen === 'defender' && practice.isDefenderRunning}
-                      gameCue={practiceScreen === 'defender' ? practice.currentCue : null}
+                      gameActive={false}
+                      gameCue={null}
+                      attackCue={
+                        practiceScreen === 'defender' && practice.isDefenderRunning
+                          ? practice.currentCue
+                          : null
+                      }
+                      showDirectionLabels={practiceScreen !== 'attacker'}
                       countdown={null}
                     />
 
@@ -1157,8 +1187,7 @@ export default function App() {
 
                     {practiceScreen === 'attacker' && practice.lastThrow && (
                       <div className="ad-result-overlay ad-result-overlay--attackerScored practice-flash">
-                        <div className="ad-result-title">{practice.lastThrow.toUpperCase()}!</div>
-                        <div className="ad-result-sub">Attack thrown</div>
+                        <div className="ad-result-title">Attack thrown!</div>
                       </div>
                     )}
 
@@ -1178,7 +1207,7 @@ export default function App() {
                         ) : (
                           <>
                             <div className="ad-result-title">HIT!</div>
-                            <div className="ad-result-sub">You&apos;d lose here — but it&apos;s practice, so you live</div>
+                            <div className="ad-result-sub">Press Start to try again</div>
                           </>
                         )}
                       </div>
